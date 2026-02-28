@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+
+import os
+import json
+import re
+import stat
+import shutil
+from datetime import datetime
+from packaging import version
+
+# ===============================
+# CVE DATABASE WITH CVSS
+# ===============================
+
+CVE_DB = [
+    {
+        "cve": "CVE-2016-1247",
+        "software": "debian cron",
+        "affected_version": "<3.0.0",
+        "cvss": 7.8,
+        "check": "log_permission"
+    },
+    {
+        "cve": "CVE-2019-9706",
+        "software": "cronie",
+        "affected_version": "<1.5.3",
+        "cvss": 7.2,
+        "check": "symlink_check"
+    },
+    {
+        "cve": "CVE-2017-9525",
+        "software": "vixie",
+        "affected_version": "<4.1",
+        "cvss": 6.5,
+        "check": "version_only"
+    },
+    {
+        "cve": "CVE-2019-13224",
+        "software": "dcron",
+        "affected_version": "<4.5",
+        "cvss": 7.5,
+        "check": "version_only"
+    },
+    {
+        "cve": "CVE-2023-22467",
+        "software": "cronie",
+        "affected_version": "<1.6.1",
+        "cvss": 8.4,
+        "check": "version_only"
+    }
+]
+
+# ===============================
+# UTIL
+# ===============================
+
+def severity_from_cvss(score):
+    if score >= 9:
+        return "Critical"
+    elif score >= 7:
+        return "High"
+    elif score >= 4:
+        return "Medium"
+    else:
+        return "Low"
+
+def match_version(current, rule):
+    if rule.startswith("<"):
+        return version.parse(current) < version.parse(rule[1:])
+    return False
+
+# ===============================
+# DETECTION LOGIC
+# ===============================
+
+def check_log_permission(base_path):
+    log_path = os.path.join(base_path, "var/log/cron")
+    if os.path.exists(log_path):
+        st = os.stat(log_path)
+        return bool(st.st_mode & stat.S_IWOTH)
+    return False
+
+def check_symlink(base_path):
+    cron_dir = os.path.join(base_path, "etc/cron.d")
+    if os.path.exists(cron_dir):
+        for root, dirs, files in os.walk(cron_dir):
+            for f in files:
+                if os.path.islink(os.path.join(root, f)):
+                    return True
+    return False
+
+# ===============================
+# LAB SIMULATION
+# ===============================
+
+def setup_lab_environment():
+    print("[*] Setting up LAB environment...")
+    base = "./lab_env"
+
+    os.makedirs(base + "/etc/cron.d", exist_ok=True)
+    os.makedirs(base + "/var/log", exist_ok=True)
+
+    # Create vulnerable log file
+    log_file = base + "/var/log/cron"
+    with open(log_file, "w") as f:
+        f.write("test")
+
+    os.chmod(log_file, 0o666)  # world writable
+
+    # Create symlink
+    target = base + "/etc/passwd_fake"
+    with open(target, "w") as f:
+        f.write("fake")
+
+    os.symlink(target, base + "/etc/cron.d/malicious_link")
+
+    print("[+] LAB ready at ./lab_env\n")
+    return base
+
+# ===============================
+# ENGINE
+# ===============================
+
+def run_scan(cron_type, cron_version, base_path="/"):
+    findings = []
+
+    for entry in CVE_DB:
+        if entry["software"] == cron_type:
+            if match_version(cron_version, entry["affected_version"]):
+
+                vulnerable = False
+
+                if entry["check"] == "version_only":
+                    vulnerable = True
+
+                elif entry["check"] == "log_permission":
+                    vulnerable = check_log_permission(base_path)
+
+                elif entry["check"] == "symlink_check":
+                    vulnerable = check_symlink(base_path)
+
+                if vulnerable:
+                    findings.append({
+                        "cve": entry["cve"],
+                        "cvss": entry["cvss"],
+                        "severity": severity_from_cvss(entry["cvss"])
+                    })
+
+    return findings
+
+# ===============================
+# MAIN
+# ===============================
+
+def main():
+
+    print("==== CronGuard PRO ====\n")
+
+    mode = input("Select mode (1=Real Scan, 2=Lab Simulation): ")
+
+    if mode == "2":
+        base = setup_lab_environment()
+        cron_type = "cronie"
+        cron_version = "1.4.0"
+    else:
+        base = "/"
+        cron_type = input("Enter detected cron type (cronie/vixie/dcron/debian cron): ")
+        cron_version = input("Enter detected cron version (e.g. 1.4.0): ")
+
+    results = run_scan(cron_type, cron_version, base)
+
+    report = {
+        "timestamp": datetime.now().isoformat(),
+        "cron_type": cron_type,
+        "cron_version": cron_version,
+        "findings": results
+    }
+
+    print("\n==== RESULT ====")
+    print(json.dumps(report, indent=4))
+
+    with open("cron_report.json", "w") as f:
+        json.dump(report, f, indent=4)
+
+    print("\nReport saved to cron_report.json\n")
+
+if __name__ == "__main__":
+    main()
