@@ -1,184 +1,109 @@
 #!/usr/bin/env python3
 
-import os
+import subprocess
 import json
-import stat
-import re
 from datetime import datetime
-from packaging import version
+import os
 
-# ======================================
-# CVE DATABASE
-# ======================================
+# ==========================
+# Capability Risk Mapping
+# ==========================
 
-CVE_DB = [
-    {
-        "cve": "CVE-2016-1247",
-        "software": "debian cron",
-        "affected": "<3.0.0",
-        "cvss": 7.8,
-        "checks": ["log_permission"]
-    },
-    {
-        "cve": "CVE-2019-9706",
-        "software": "cronie",
-        "affected": "<1.5.3",
-        "cvss": 7.2,
-        "checks": ["symlink"]
-    },
-    {
-        "cve": "CVE-2017-9525",
-        "software": "vixie",
-        "affected": "<4.1",
-        "cvss": 6.5,
-        "checks": []
-    },
-    {
-        "cve": "CVE-2019-13224",
-        "software": "dcron",
-        "affected": "<4.5",
-        "cvss": 7.5,
-        "checks": []
-    },
-    {
-        "cve": "CVE-2023-22467",
-        "software": "cronie",
-        "affected": "<1.6.1",
-        "cvss": 8.4,
-        "checks": []
-    }
-]
+CAP_RISK_MAP = {
+    "cap_sys_admin": {"severity": "CRITICAL", "score": 9.5},
+    "cap_setuid": {"severity": "CRITICAL", "score": 9.0},
+    "cap_setgid": {"severity": "HIGH", "score": 8.0},
+    "cap_dac_override": {"severity": "HIGH", "score": 7.5},
+    "cap_net_admin": {"severity": "MEDIUM", "score": 6.5}
+}
 
-# ======================================
-# UTIL
-# ======================================
+# ==========================
+# Get capabilities from system
+# ==========================
 
-def severity(cvss):
-    if cvss >= 9:
-        return "Critical"
-    elif cvss >= 7:
-        return "High"
-    elif cvss >= 4:
-        return "Medium"
-    return "Low"
+def get_capabilities():
+    try:
+        result = subprocess.run(
+            ["getcap", "-r", "/"],
+            capture_output=True,
+            text=True,
+            stderr=subprocess.DEVNULL
+        )
+        return result.stdout.strip().split("\n")
+    except:
+        return []
 
-def version_match(current, rule):
-    if rule.startswith("<"):
-        return version.parse(current) < version.parse(rule[1:])
-    return False
+# ==========================
+# Check if world writable
+# ==========================
 
-# ======================================
-# MISCONFIG CHECKS
-# ======================================
-
-def check_log_permission(base):
-    path = os.path.join(base, "var/log/cron")
-    if os.path.exists(path):
-        st = os.stat(path)
-        return bool(st.st_mode & stat.S_IWOTH)
-    return False
-
-def check_symlink(base):
-    cron_dir = os.path.join(base, "etc/cron.d")
-    if not os.path.exists(cron_dir):
+def is_world_writable(path):
+    try:
+        return bool(os.stat(path).st_mode & 0o002)
+    except:
         return False
 
-    for root, dirs, files in os.walk(cron_dir):
-        for f in files:
-            if os.path.islink(os.path.join(root, f)):
-                return True
-    return False
+# ==========================
+# Analyze capabilities
+# ==========================
 
-# ======================================
-# LAB MODE
-# ======================================
-
-def setup_lab():
-    base = "./lab_env"
-    os.makedirs(base + "/etc/cron.d", exist_ok=True)
-    os.makedirs(base + "/var/log", exist_ok=True)
-
-    with open(base + "/var/log/cron", "w") as f:
-        f.write("test")
-    os.chmod(base + "/var/log/cron", 0o666)
-
-    with open(base + "/etc/passwd_fake", "w") as f:
-        f.write("fake")
-
-    os.symlink(base + "/etc/passwd_fake",
-               base + "/etc/cron.d/malicious_link")
-
-    return base
-
-# ======================================
-# SCAN ENGINE
-# ======================================
-
-def run_scan(cron_type, cron_version, base="/"):
+def analyze_capabilities(lines):
     findings = []
 
-    for entry in CVE_DB:
-        if entry["software"] != cron_type:
+    for line in lines:
+        if "=" not in line:
             continue
 
-        if not version_match(cron_version, entry["affected"]):
-            continue
+        path, caps = line.split("=", 1)
+        caps = caps.lower()
+        path = path.strip()
 
-        confidence = "High"
+        for cap in CAP_RISK_MAP.keys():
+            if cap in caps:
 
-        # Run additional checks
-        for check in entry["checks"]:
-            if check == "log_permission":
-                if not check_log_permission(base):
-                    confidence = "Low"
-            if check == "symlink":
-                if not check_symlink(base):
-                    confidence = "Low"
+                risk_info = CAP_RISK_MAP[cap]
+                world_writable = is_world_writable(path)
 
-        findings.append({
-            "cve": entry["cve"],
-            "cvss": entry["cvss"],
-            "severity": severity(entry["cvss"]),
-            "confidence": confidence
-        })
+                score = risk_info["score"]
+                if world_writable:
+                    score += 0.5  # เพิ่มความเสี่ยงถ้าเขียนได้
+
+                findings.append({
+                    "binary": path,
+                    "capability": cap,
+                    "severity": risk_info["severity"],
+                    "risk_score": round(score, 1),
+                    "world_writable": world_writable,
+                    "description": "Potential privilege escalation vector"
+                })
 
     return findings
 
-# ======================================
+# ==========================
 # MAIN
-# ======================================
+# ==========================
 
 def main():
-    print("==== CronGuard Enterprise ====\n")
+    print("=== Linux Capability Vulnerability Scanner (Advanced) ===\n")
 
-    mode = input("Mode (1=Real, 2=Lab): ")
+    lines = get_capabilities()
+    results = analyze_capabilities(lines)
 
-    if mode == "2":
-        base = setup_lab()
-        cron_type = "cronie"
-        cron_version = "1.4.0"
-    else:
-        base = "/"
-        cron_type = input("Cron type (cronie/vixie/dcron/debian cron): ")
-        cron_version = input("Cron version: ")
-
-    results = run_scan(cron_type, cron_version, base)
+    overall_risk = max([f["risk_score"] for f in results], default=0)
 
     report = {
         "timestamp": datetime.now().isoformat(),
-        "cron_type": cron_type,
-        "cron_version": cron_version,
         "total_findings": len(results),
+        "overall_risk_score": overall_risk,
         "findings": results
     }
 
-    print("\n=== RESULT ===")
     print(json.dumps(report, indent=4))
 
-    with open("cron_report.json", "w") as f:
+    with open("capability_report.json", "w") as f:
         json.dump(report, f, indent=4)
 
-    print("\nReport saved to cron_report.json\n")
+    print("\nReport saved to capability_report.json\n")
 
 if __name__ == "__main__":
     main()
