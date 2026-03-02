@@ -144,8 +144,9 @@ CVE_DB = [
         "severity": "HIGH",
         "category": "Kernel",
         "path_patterns": [
-            "/proc/sysrq-trigger", "/proc/sys/kernel",
-            "/proc/sys/fs"
+            "/proc/sysrq-trigger",
+            "/proc/sys/fs/pipe-max-size",
+            "/proc/sys/fs/pipe-user-pages-soft"
         ],
         "remediation": "Upgrade kernel to >= 5.16.11 / 5.15.25 / 5.10.102"
     },
@@ -157,9 +158,13 @@ CVE_DB = [
         "severity": "HIGH",
         "category": "glibc",
         "path_patterns": [
-            "/etc/ld.so.conf", "/etc/ld.so.conf.d",
-            "/lib", "/lib64",
-            "/usr/lib", "/usr/lib64"
+            "/etc/ld.so.conf",
+            "/etc/ld.so.conf.d/",
+            "/etc/ld.so.preload",
+            "/lib/x86_64-linux-gnu/libc",
+            "/lib/x86_64-linux-gnu/ld-linux",
+            "/usr/lib/x86_64-linux-gnu/libc",
+            "/lib64/ld-linux"
         ],
         "remediation": "chmod 755 /usr/lib && upgrade glibc to patched version"
     },
@@ -171,8 +176,11 @@ CVE_DB = [
         "severity": "HIGH",
         "category": "sudo",
         "path_patterns": [
-            "/etc", "/etc/sudo.conf",
-            "/usr/bin/sudo", "/usr/sbin"
+            "/etc/sudo.conf",
+            "/etc/sudoers",
+            "/etc/sudoers.d/",
+            "/usr/bin/sudo",
+            "/usr/sbin/sudo"
         ],
         "remediation": "Upgrade sudo to >= 1.9.5p2 && chmod 755 /etc"
     },
@@ -184,8 +192,8 @@ CVE_DB = [
         "severity": "HIGH",
         "category": "Kernel",
         "path_patterns": [
-            "/sys/fs/bpf", "/sys/kernel/debug/bpf",
-            "/sys/kernel"
+            "/sys/fs/bpf",
+            "/sys/kernel/debug/bpf"
         ],
         "remediation": "sysctl -w kernel.unprivileged_bpf_disabled=1 && chmod 700 /sys/fs/bpf"
     },
@@ -221,8 +229,8 @@ CVE_DB = [
         "severity": "HIGH",
         "category": "Process",
         "path_patterns": [
-            "/proc/sys/kernel/yama",
-            "/proc/sys/kernel"
+            "/proc/sys/kernel/yama/ptrace_scope",
+            "/proc/sys/kernel/perf_event_paranoid"
         ],
         "remediation": "sysctl -w kernel.yama.ptrace_scope=1"
     },
@@ -234,8 +242,12 @@ CVE_DB = [
         "severity": "HIGH",
         "category": "glibc",
         "path_patterns": [
-            "/lib", "/lib64", "/usr/lib",
-            "/usr/lib64", "/lib/x86_64-linux-gnu"
+            "/etc/ld.so.conf",
+            "/etc/ld.so.preload",
+            "/lib/x86_64-linux-gnu/libc",
+            "/lib/x86_64-linux-gnu/ld-linux",
+            "/usr/lib/x86_64-linux-gnu/libc",
+            "/lib64/ld-linux"
         ],
         "remediation": "Upgrade glibc to >= 2.26 and restrict lib directory permissions"
     },
@@ -266,6 +278,53 @@ SCAN_ROOTS = [
     "/run", "/proc/sys/kernel",
     "/sys/fs/bpf", "/lib",
 ]
+
+# ==============================
+# Whitelist — known-safe paths (suppress false positives)
+# ==============================
+
+# Symlinks shipped by OS packages inside systemd dirs
+# are designed to be symlinks — not attacker-controlled.
+WHITELIST_PREFIXES = [
+    "/usr/lib/systemd/",
+    "/lib/systemd/",
+    "/etc/systemd/",
+    "/run/systemd/",
+    # X11 / display sockets under sticky-bit dir = safe
+    "/tmp/.X11-unix/",
+    "/tmp/.XIM-unix/",
+    "/tmp/.ICE-unix/",
+    "/tmp/.font-unix/",
+    "/tmp/.dbus-unix/",
+    # VMware DnD — virtualisation artifact
+    "/tmp/VMwareDnD",
+    # PHP session — sticky bit, root-owned, expected
+    "/var/lib/php/sessions",
+    # User-private runtime sockets (pipewire, pulse)
+    "/run/user/",
+]
+
+# Symlinks whose TARGET points to /dev/null or is inside
+# another systemd dir are safe by design (masking units).
+def is_whitelisted(path):
+    for prefix in WHITELIST_PREFIXES:
+        if path.startswith(prefix):
+            return True
+    # Systemd unit-file symlinks: .service .socket .target etc.
+    UNIT_EXTS = (
+        ".service", ".socket", ".target", ".mount",
+        ".automount", ".swap", ".path", ".timer",
+        ".slice", ".scope", ".link", ".network", ".netdev",
+    )
+    if os.path.islink(path) and path.endswith(UNIT_EXTS):
+        try:
+            target = os.readlink(path)
+            # /dev/null masking, or a real unit file inside /usr/lib
+            if target == "/dev/null" or "/usr/lib/" in target or "/lib/" in target:
+                return True
+        except:
+            pass
+    return False
 
 # ==============================
 # Detection Logic
@@ -321,6 +380,10 @@ def scan_writable_paths():
                     visited.add(full_path)
 
                     if is_world_writable(full_path):
+                        # Skip known-safe OS paths (systemd symlinks, X sockets, etc.)
+                        if is_whitelisted(full_path):
+                            continue
+
                         sticky   = is_sticky_bit_set(full_path)
                         ptype    = path_type(full_path)
                         owner    = get_owner(full_path)
@@ -355,8 +418,19 @@ def correlate_cve(writable_findings):
         matched_paths = []
         for pattern in cve["path_patterns"]:
             for wp in writable_paths:
-                if wp.startswith(pattern) or pattern in wp:
+                # Exact match OR: wp IS the pattern, or wp is directly inside
+                # the pattern dir (not deeper subdirs of unrelated packages)
+                if wp == pattern:
                     matched_paths.append(wp)
+                elif pattern.endswith("/") and wp.startswith(pattern):
+                    # pattern explicitly ends with / = subtree match intended
+                    matched_paths.append(wp)
+                elif not pattern.endswith("/") and wp.startswith(pattern + "/"):
+                    # Only one level deep (e.g. /etc/sudoers.d/file — not /usr/lib/systemd/...)
+                    # Allow only if the remainder has no more slashes
+                    remainder = wp[len(pattern)+1:]
+                    if "/" not in remainder:
+                        matched_paths.append(wp)
 
         if matched_paths:
             cve_hits[cve["cve"]] = {
