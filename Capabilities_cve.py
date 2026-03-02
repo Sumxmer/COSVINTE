@@ -240,8 +240,9 @@ def get_capabilities():
     try:
         result = subprocess.run(
             ["getcap", "-r", "/"],
-            capture_output=True, text=True,
-            stderr=subprocess.DEVNULL, timeout=60
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True, timeout=60
         )
         lines = [l for l in result.stdout.strip().split("\n") if l.strip()]
         return lines
