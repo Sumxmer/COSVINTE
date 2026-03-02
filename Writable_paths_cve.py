@@ -286,44 +286,67 @@ SCAN_ROOTS = [
 # Symlinks shipped by OS packages inside systemd dirs
 # are designed to be symlinks — not attacker-controlled.
 WHITELIST_PREFIXES = [
+    # systemd dirs — symlinks shipped by OS packages
     "/usr/lib/systemd/",
     "/lib/systemd/",
     "/etc/systemd/",
     "/run/systemd/",
-    # X11 / display sockets under sticky-bit dir = safe
-    "/tmp/.X11-unix/",
-    "/tmp/.XIM-unix/",
-    "/tmp/.ICE-unix/",
-    "/tmp/.font-unix/",
-    "/tmp/.dbus-unix/",
-    # VMware DnD — virtualisation artifact
-    "/tmp/VMwareDnD",
-    # PHP session — sticky bit, root-owned, expected
-    "/var/lib/php/sessions",
-    # User-private runtime sockets (pipewire, pulse)
+    # X11 / display socket dirs — sticky-bit, expected behaviour
+    "/tmp/.X11-unix",
+    "/tmp/.XIM-unix",
+    "/tmp/.ICE-unix",
+    "/tmp/.font-unix",
+    "/tmp/.dbus-unix",
+    # User-private runtime (pipewire, pulseaudio)
     "/run/user/",
+    # Standard runtime dirs with sticky bit — normal OS
+    "/run/lock",
+    "/run/screen",
+    "/run/shm",
+    # VMware DnD virtualisation artifact
+    "/tmp/VMwareDnD",
+    # PHP session dir — sticky bit, root-owned, expected
+    "/var/lib/php/sessions",
+    # Unix domain sockets owned by daemons — IPC, not exploitable writable files
+    "/run/ssh-unix-local/",
+    "/run/pcscd/",
+    "/run/dbus/",
+    "/run/avahi-daemon/",
+    "/run/cups/",
+    "/run/bluetooth/",
+    # ns_last_pid — writable by design for user namespaces, not a Dirty Pipe vector
+    "/proc/sys/kernel/ns_last_pid",
 ]
 
-# Symlinks whose TARGET points to /dev/null or is inside
-# another systemd dir are safe by design (masking units).
 def is_whitelisted(path):
+    """Return True for known-safe OS paths that are world-writable by design."""
+    p = path.rstrip("/")
     for prefix in WHITELIST_PREFIXES:
-        if path.startswith(prefix):
+        pfx = prefix.rstrip("/")
+        if p == pfx or p.startswith(pfx + "/"):
             return True
-    # Systemd unit-file symlinks: .service .socket .target etc.
+
+    # Unix domain sockets anywhere under /run are IPC endpoints, not dangerous
+    try:
+        if p.startswith("/run/") and stat.S_ISSOCK(os.lstat(p).st_mode):
+            return True
+    except:
+        pass
+
+    # Systemd unit-file symlinks (.service .socket .target etc.) safe OS design
     UNIT_EXTS = (
         ".service", ".socket", ".target", ".mount",
         ".automount", ".swap", ".path", ".timer",
         ".slice", ".scope", ".link", ".network", ".netdev",
     )
-    if os.path.islink(path) and path.endswith(UNIT_EXTS):
+    if os.path.islink(p) and p.endswith(UNIT_EXTS):
         try:
-            target = os.readlink(path)
-            # /dev/null masking, or a real unit file inside /usr/lib
+            target = os.readlink(p)
             if target == "/dev/null" or "/usr/lib/" in target or "/lib/" in target:
                 return True
         except:
             pass
+
     return False
 
 # ==============================
