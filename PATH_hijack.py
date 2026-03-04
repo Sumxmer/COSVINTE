@@ -54,8 +54,7 @@ def cvss_bar(score, width=20):
     return f"{color}{bar}{Color.RESET} {Color.BOLD}{score:.1f}{Color.RESET}"
 
 # ==============================
-# CVE Database — เฉพาะเจาะจง
-# trigger_conditions: สิ่งที่ต้องตรวจพบ
+# CVE Database
 # ==============================
 CVE_DB = [
     {
@@ -63,9 +62,17 @@ CVE_DB = [
         "name": "PwnKit — pkexec ENV Injection",
         "category": "SUID / Polkit",
         "description": "pkexec fails to handle argv/envp correctly, allowing environment variable injection to load malicious shared objects as root.",
+        "description_th": "pkexec จัดการ argv/envp ไม่ถูกต้อง ทำให้ผู้โจมตีสามารถ inject environment variable เพื่อโหลด shared object ที่เป็นอันตรายในฐานะ root",
+        "impact_th": "ผู้ใช้งานทั่วไป (non-root) สามารถยกระดับสิทธิ์เป็น root ได้ทันทีบน Linux distribution แทบทุกตัว เนื่องจาก pkexec มักถูกติดตั้งแบบ SUID เป็นค่าเริ่มต้น",
         "cvss": 7.8,
         "severity": "HIGH",
         "remediation": "Upgrade polkit >= 0.120 or: chmod 0755 /usr/bin/pkexec",
+        "prevention_th": [
+            "อัปเกรด polkit เป็นเวอร์ชัน 0.120 ขึ้นไปทันที: apt upgrade policykit-1",
+            "หากอัปเกรดไม่ได้ทันที ให้ถอด SUID bit ชั่วคราว: chmod 0755 /usr/bin/pkexec",
+            "ตรวจสอบว่ามีการ exploit แล้วหรือยัง: ausearch -c pkexec --raw | aureport -f",
+            "ใช้ AppArmor/SELinux profile สำหรับ pkexec เพื่อจำกัด action ที่ทำได้",
+        ],
         "trigger": {
             "needs_suid_binary": ["pkexec", "polkit"],
             "needs_writable_path": False,
@@ -77,9 +84,17 @@ CVE_DB = [
         "name": "sudo -u#-1 Runas Bypass",
         "category": "sudo",
         "description": "sudo allows a user to run commands as UID -1 (resolves to 0/root) if sudoers allows runas ALL, bypassing restrictions.",
+        "description_th": "sudo อนุญาตให้รัน command ด้วย UID -1 ซึ่ง resolve เป็น UID 0 (root) ได้ เมื่อ sudoers ตั้งค่า runas เป็น ALL ทำให้ข้ามข้อจำกัดที่ตั้งไว้",
+        "impact_th": "ผู้ใช้ที่ได้รับอนุญาตให้รัน sudo ในบางรูปแบบ สามารถใช้ 'sudo -u#-1 /bin/bash' เพื่อได้ root shell แม้จะถูกห้ามรันในฐานะ root โดยตรง",
         "cvss": 8.8,
         "severity": "HIGH",
         "remediation": "Upgrade sudo >= 1.8.28 and audit /etc/sudoers for 'ALL' runas entries.",
+        "prevention_th": [
+            "อัปเกรด sudo เป็นเวอร์ชัน 1.8.28 ขึ้นไป: apt upgrade sudo",
+            "ตรวจสอบ sudoers ทุกบรรทัดที่มี ALL: grep -i 'runas.*all' /etc/sudoers /etc/sudoers.d/*",
+            "หลีกเลี่ยงการใช้ 'ALL' ใน runas spec ให้ระบุ user/group ที่อนุญาตอย่างชัดเจน",
+            "ใช้ 'sudo -l' เพื่อ audit สิทธิ์ที่แต่ละ user มีอยู่เป็นประจำ",
+        ],
         "trigger": {
             "needs_suid_binary": ["sudo"],
             "needs_writable_path": False,
@@ -91,9 +106,18 @@ CVE_DB = [
         "name": "LD_PRELOAD / LD_AUDIT Hijack",
         "category": "Dynamic Linker",
         "description": "SUID binaries that do not sanitize LD_PRELOAD / LD_AUDIT environment variables allow loading attacker-controlled shared libraries as root.",
+        "description_th": "SUID binary ที่ไม่กรอง LD_PRELOAD หรือ LD_AUDIT ออก จะทำให้ dynamic linker โหลด shared library ของผู้โจมตีในฐานะ root",
+        "impact_th": "ผู้โจมตีสร้าง .so file ที่มี malicious code แล้วตั้ง LD_PRELOAD ให้ชี้ไปที่ไฟล์นั้น เมื่อ SUID binary ถูกรัน library จะโหลดโดยอัตโนมัติด้วยสิทธิ์ root",
         "cvss": 7.2,
         "severity": "HIGH",
         "remediation": "Ensure ld.so ignores LD_PRELOAD for SUID binaries (default in modern glibc). Audit SUID binaries.",
+        "prevention_th": [
+            "ตรวจสอบว่า glibc เวอร์ชันปัจจุบันกรอง LD_PRELOAD สำหรับ SUID binary โดยอัตโนมัติ",
+            "ลบ environment variable ที่เป็นอันตรายออกจาก shell: unset LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH",
+            "ใช้ env_reset ใน sudoers เพื่อล้าง environment ก่อนรัน sudo: Defaults env_reset",
+            "ตรวจสอบว่าไม่มี LD_PRELOAD ใน /etc/environment, /etc/profile, หรือ .bashrc",
+            "ใช้ seccomp/AppArmor เพื่อจำกัด syscall ที่ SUID binary ใช้ได้",
+        ],
         "trigger": {
             "needs_suid_binary": [],
             "needs_writable_path": False,
@@ -105,9 +129,18 @@ CVE_DB = [
         "name": "runuser Insecure PATH",
         "category": "PATH Hijack",
         "description": "runuser/su does not sanitize PATH, allowing attackers to place malicious binaries in world-writable PATH dirs that get executed as root.",
+        "description_th": "runuser และ su ไม่ทำการกรอง PATH variable ทำให้ผู้โจมตีวาง binary ปลอมไว้ใน PATH directory ที่ทุกคนเขียนได้ เพื่อให้ถูกรันแทน binary จริงในฐานะ root",
+        "impact_th": "หากมี world-writable directory อยู่ต้น PATH เช่น /tmp ผู้โจมตีวาง binary ชื่อเดียวกับ command ที่ script root ใช้งาน เมื่อ script รัน binary ของผู้โจมตีจะถูกเรียกแทน",
         "cvss": 7.0,
         "severity": "HIGH",
         "remediation": "Remove world-writable directories from PATH. Use absolute paths in scripts.",
+        "prevention_th": [
+            "ลบ world-writable directory ออกจาก PATH ทันที โดยเฉพาะ /tmp และ /var/tmp",
+            "ใช้ path แบบ absolute ใน script ทุกตัว เช่น /usr/bin/python3 แทน python3",
+            "ตั้งค่า secure PATH ใน /etc/environment: PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "ใช้ 'env -i' เมื่อรัน script ที่ต้องการ environment ที่สะอาด",
+            "audit script ที่รันด้วย root privilege ทุกตัวให้ใช้ absolute path",
+        ],
         "trigger": {
             "needs_suid_binary": ["su", "runuser"],
             "needs_writable_path": True,
@@ -119,9 +152,17 @@ CVE_DB = [
         "name": "OverlayFS Local Privilege Escalation",
         "category": "Filesystem / PATH",
         "description": "Ubuntu OverlayFS allows unprivileged users to mount overlayfs on arbitrary paths, combined with PATH hijack to escalate privileges.",
+        "description_th": "Ubuntu อนุญาตให้ผู้ใช้ทั่วไป mount overlayfs บน path ใดก็ได้ เมื่อใช้ร่วมกับ PATH hijack ทำให้ยกระดับสิทธิ์ได้",
+        "impact_th": "ผู้โจมตีสร้าง overlayfs layer ที่ซ้อนทับ /bin หรือ /usr/bin เพื่อให้ binary ที่ตัวเองควบคุมถูกรันแทน binary จริง เมื่อมี world-writable PATH directory ร่วมด้วยจะ exploit ได้ง่ายขึ้น",
         "cvss": 6.5,
         "severity": "MEDIUM",
         "remediation": "Upgrade kernel. Restrict user namespaces: sysctl -w kernel.unprivileged_userns_clone=0",
+        "prevention_th": [
+            "อัปเกรด kernel เป็นเวอร์ชันที่ได้รับการ patch แล้ว",
+            "ปิด unprivileged user namespace: sysctl -w kernel.unprivileged_userns_clone=0",
+            "ทำให้ค่านี้คงอยู่หลัง reboot: echo 'kernel.unprivileged_userns_clone=0' >> /etc/sysctl.conf",
+            "ลบ world-writable directory ออกจาก PATH เพื่อลด attack surface",
+        ],
         "trigger": {
             "needs_suid_binary": [],
             "needs_writable_path": True,
@@ -133,9 +174,17 @@ CVE_DB = [
         "name": "sudo Insecure PATH (Sudosmash)",
         "category": "sudo / PATH",
         "description": "sudo on Linux reads /proc/[pid]/stat to determine terminal device. Combined with PATH hijack in writable dir, allows privilege escalation.",
+        "description_th": "sudo อ่าน /proc/[pid]/stat เพื่อระบุ terminal device และมีช่องโหว่ในการ parse ข้อมูลนั้น เมื่อรวมกับ world-writable PATH directory ทำให้ยกระดับสิทธิ์ได้",
+        "impact_th": "ผู้โจมตีสามารถบังคับให้ sudo โหลด binary จาก world-writable directory โดยการสร้าง symlink หรือ file ที่มีชื่อพิเศษ และได้ root shell ในที่สุด",
         "cvss": 6.3,
         "severity": "MEDIUM",
         "remediation": "Upgrade sudo >= 1.8.21. Ensure no world-writable dirs appear before /usr/bin in PATH.",
+        "prevention_th": [
+            "อัปเกรด sudo เป็นเวอร์ชัน 1.8.21 ขึ้นไป",
+            "ตรวจสอบและลบ world-writable directory ออกจาก PATH โดยเฉพาะที่อยู่ก่อน /usr/bin",
+            "ตรวจสอบ PATH ปัจจุบัน: echo $PATH | tr ':' '\\n' | while read p; do ls -ld \"$p\"; done",
+            "ใช้ secure_path ใน sudoers เพื่อ override PATH เสมอ: Defaults secure_path=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        ],
         "trigger": {
             "needs_suid_binary": ["sudo"],
             "needs_writable_path": True,
@@ -147,9 +196,17 @@ CVE_DB = [
         "name": "sudoedit PATH Arbitrary File Edit",
         "category": "sudo",
         "description": "sudoedit allows users to append extra flags controlling the editor. Combined with writable PATH, arbitrary files can be edited as root.",
+        "description_th": "sudoedit อนุญาตให้ผู้ใช้แนบ flag พิเศษเพื่อควบคุม editor ที่ใช้งาน เมื่อใช้ร่วมกับ writable PATH หรือ SUDO_EDITOR ที่ถูก set ผู้โจมตีสามารถแก้ไขไฟล์ใดก็ได้ในฐานะ root",
+        "impact_th": "ผู้โจมตีตั้ง SUDO_EDITOR หรือ VISUAL ให้ชี้ไปยัง script ที่เป็นอันตราย แล้วรัน sudoedit เพื่อให้ script นั้นถูกเรียกด้วยสิทธิ์ root สามารถแก้ไข /etc/passwd หรือ /etc/sudoers ได้",
         "cvss": 7.8,
         "severity": "HIGH",
         "remediation": "Upgrade sudo >= 1.9.12p2. Restrict SUDO_EDITOR and VISUAL env vars.",
+        "prevention_th": [
+            "อัปเกรด sudo เป็นเวอร์ชัน 1.9.12p2 ขึ้นไปทันที",
+            "เพิ่ม env_delete ใน sudoers เพื่อลบ env var อันตราย: Defaults env_delete+='SUDO_EDITOR VISUAL EDITOR'",
+            "กำหนด editor ที่อนุญาตอย่างชัดเจนใน sudoers: Defaults editor=/usr/bin/nano:/usr/bin/vim",
+            "ตรวจสอบว่า SUDO_EDITOR และ VISUAL ไม่ได้ถูก set ใน environment: env | grep -E 'EDITOR|VISUAL'",
+        ],
         "trigger": {
             "needs_suid_binary": ["sudo"],
             "needs_writable_path": False,
@@ -161,11 +218,20 @@ CVE_DB = [
         "name": "Dirty Pipe — SUID Binary Overwrite",
         "category": "Kernel / SUID",
         "description": "Dirty Pipe allows overwriting arbitrary read-only files including SUID binaries via pipe buffer flags, enabling privilege escalation.",
+        "description_th": "ช่องโหว่ใน Linux kernel ทำให้สามารถเขียนทับไฟล์ read-only ใดก็ได้รวมถึง SUID binary ผ่าน pipe buffer โดยไม่ต้องมีสิทธิ์พิเศษ",
+        "impact_th": "ผู้โจมตีเขียนทับ SUID binary เช่น /usr/bin/passwd ด้วย shellcode แล้วรัน binary นั้นเพื่อได้ root shell แม้ไฟล์จะเป็น read-only และ owned by root",
         "cvss": 7.8,
         "severity": "HIGH",
         "remediation": "Upgrade kernel >= 5.16.11 / 5.15.25 / 5.10.102",
+        "prevention_th": [
+            "อัปเกรด kernel เป็นเวอร์ชัน 5.16.11, 5.15.25, หรือ 5.10.102 ขึ้นไปทันที",
+            "ตรวจสอบเวอร์ชัน kernel ปัจจุบัน: uname -r",
+            "หากอัปเกรดไม่ได้ ลด attack surface โดยลบ SUID binary ที่ไม่จำเป็น",
+            "ใช้ integrity checking เช่น IMA เพื่อตรวจจับการเปลี่ยนแปลง SUID binary",
+            "Monitor kernel exploit attempt ด้วย auditd: auditctl -a always,exit -F arch=b64 -S open -F exit=-EACCES",
+        ],
         "trigger": {
-            "needs_suid_binary": [],   # any SUID binary is a target
+            "needs_suid_binary": [],
             "needs_writable_path": False,
             "needs_env_var": [],
             "needs_any_suid": True
@@ -176,9 +242,17 @@ CVE_DB = [
         "name": "Baron Samedit — sudo Heap Overflow",
         "category": "sudo",
         "description": "Heap-based buffer overflow in sudoedit (triggered by trailing backslash) allows unprivileged local users to gain root.",
+        "description_th": "ช่องโหว่ heap buffer overflow ใน sudoedit เกิดจากการจัดการ backslash ที่ท้าย argument ไม่ถูกต้อง ทำให้ผู้ใช้ทั่วไปสามารถรัน code ในฐานะ root",
+        "impact_th": "ผู้โจมตีส่ง argument พิเศษที่มี trailing backslash ไปยัง sudoedit เพื่อ trigger heap overflow แล้วใช้เทคนิค heap exploitation เพื่อรันคำสั่งในฐานะ root โดยไม่ต้องรู้ password",
         "cvss": 7.8,
         "severity": "HIGH",
         "remediation": "Upgrade sudo >= 1.9.5p2",
+        "prevention_th": [
+            "อัปเกรด sudo เป็นเวอร์ชัน 1.9.5p2 ขึ้นไปทันที: apt upgrade sudo",
+            "ตรวจสอบเวอร์ชัน sudo ที่ใช้งานอยู่: sudo --version",
+            "ตรวจสอบว่า exploit แล้วหรือยัง: grep 'sudo' /var/log/auth.log | grep -i 'error\\|segfault'",
+            "ถ้าอัปเกรดไม่ได้ ใช้ aliasas เพื่อ block sudoedit ชั่วคราว",
+        ],
         "trigger": {
             "needs_suid_binary": ["sudo"],
             "needs_writable_path": False,
@@ -190,9 +264,17 @@ CVE_DB = [
         "name": "sudo pwfeedback Stack Overflow",
         "category": "sudo",
         "description": "Buffer overflow in sudo pwfeedback feature allows privilege escalation when a user can run sudo commands.",
+        "description_th": "ช่องโหว่ stack buffer overflow ใน sudo เกิดจาก pwfeedback feature ที่แสดง '*' ขณะพิมพ์ password เมื่อรับ input ยาวเกินกำหนดจะเกิด overflow",
+        "impact_th": "ผู้โจมตีส่ง password ยาวมากผ่าน pipe ไปยัง sudo เพื่อ overflow stack buffer แล้วควบคุม execution flow เพื่อได้ root shell",
         "cvss": 7.8,
         "severity": "HIGH",
         "remediation": "Upgrade sudo >= 1.8.31 or disable pwfeedback in sudoers.",
+        "prevention_th": [
+            "อัปเกรด sudo เป็นเวอร์ชัน 1.8.31 ขึ้นไป",
+            "ปิด pwfeedback ใน /etc/sudoers: Defaults !pwfeedback",
+            "ตรวจสอบว่า pwfeedback เปิดอยู่หรือไม่: sudo -l | grep pwfeedback",
+            "ใช้ grep -r 'pwfeedback' /etc/sudoers /etc/sudoers.d/ เพื่อ audit การตั้งค่า",
+        ],
         "trigger": {
             "needs_suid_binary": ["sudo"],
             "needs_writable_path": False,
@@ -204,9 +286,16 @@ CVE_DB = [
         "name": "n_tty Race Condition via SUID",
         "category": "Kernel / TTY",
         "description": "Race condition in Linux kernel tty layer allows local privilege escalation; exploitable via SUID tty-attached binaries.",
+        "description_th": "Race condition ใน tty layer ของ Linux kernel ทำให้ผู้โจมตีสามารถใช้ SUID binary ที่ attach กับ tty เพื่อยกระดับสิทธิ์ได้",
+        "impact_th": "ผู้โจมตีใช้ SUID binary เพื่อเปิด tty แล้ว trigger race condition ใน kernel เพื่อ execute code ในฐานะ root — เหมาะสำหรับระบบที่มี SUID binary จำนวนมาก",
         "cvss": 6.9,
         "severity": "MEDIUM",
         "remediation": "Upgrade kernel >= 3.14.3. Apply distro patches.",
+        "prevention_th": [
+            "อัปเกรด kernel เป็นเวอร์ชัน 3.14.3 ขึ้นไป หรือ apply distro security patch",
+            "ลด SUID binary ที่ไม่จำเป็นออกจากระบบ: find / -perm -4000 -type f 2>/dev/null",
+            "ใช้ systemd sandboxing สำหรับ service ที่ใช้ tty: PrivateTmp=yes, NoNewPrivileges=yes",
+        ],
         "trigger": {
             "needs_suid_binary": [],
             "needs_writable_path": False,
@@ -219,9 +308,18 @@ CVE_DB = [
         "name": "AF_PACKET via Writable PATH Escalation",
         "category": "Network / PATH",
         "description": "AF_PACKET socket combined with world-writable PATH directories allows crafting race conditions for privilege escalation.",
+        "description_th": "AF_PACKET socket เมื่อใช้ร่วมกับ world-writable PATH directory ทำให้สามารถสร้าง race condition เพื่อยกระดับสิทธิ์ได้",
+        "impact_th": "ผู้โจมตีที่มีสิทธิ์สร้าง AF_PACKET socket (หรือผ่าน cap_net_raw) ร่วมกับ PATH directory ที่เขียนได้ สามารถ trigger race condition ใน kernel network stack เพื่อได้ root",
         "cvss": 7.8,
         "severity": "HIGH",
         "remediation": "Upgrade kernel >= 4.10.6. Restrict raw socket capabilities.",
+        "prevention_th": [
+            "อัปเกรด kernel เป็นเวอร์ชัน 4.10.6 ขึ้นไป",
+            "จำกัดการสร้าง AF_PACKET socket: sysctl -w net.core.bpf_jit_harden=2",
+            "ลบ world-writable directory ออกจาก PATH เพื่อตัด attack vector",
+            "จำกัด cap_net_raw ไม่ให้มอบให้ process ที่ไม่จำเป็น",
+            "ใช้ seccomp profile เพื่อ block socket(AF_PACKET) syscall สำหรับ process ทั่วไป",
+        ],
         "trigger": {
             "needs_suid_binary": [],
             "needs_writable_path": True,
@@ -229,6 +327,60 @@ CVE_DB = [
         }
     },
 ]
+
+# ==============================
+# Dangerous ENV var descriptions (Thai)
+# ==============================
+ENV_VAR_INFO = {
+    "LD_PRELOAD": {
+        "desc_th": "บังคับให้ dynamic linker โหลด shared library ที่กำหนดก่อน library อื่น อาจถูกใช้ override function ใน SUID binary",
+        "risk": "HIGH"
+    },
+    "LD_AUDIT": {
+        "desc_th": "กำหนด audit library สำหรับ dynamic linker สามารถใช้ inject code ในลักษณะเดียวกับ LD_PRELOAD",
+        "risk": "HIGH"
+    },
+    "LD_LIBRARY_PATH": {
+        "desc_th": "เพิ่ม directory ค้นหา shared library สามารถใช้โหลด library ปลอมแทนของจริงได้",
+        "risk": "HIGH"
+    },
+    "SUDO_EDITOR": {
+        "desc_th": "กำหนด editor ที่ sudoedit ใช้งาน หากถูก set เป็น script อันตราย จะถูกรันด้วย root privilege",
+        "risk": "MEDIUM"
+    },
+    "VISUAL": {
+        "desc_th": "กำหนด visual editor ที่ใช้งาน sudo อาจ inherit ค่านี้ไปได้หาก env_reset ไม่ถูก set",
+        "risk": "MEDIUM"
+    },
+    "EDITOR": {
+        "desc_th": "กำหนด default text editor อาจถูก sudo หรือ program อื่นใช้งาน",
+        "risk": "MEDIUM"
+    },
+    "PYTHONPATH": {
+        "desc_th": "เพิ่ม directory ค้นหา Python module หาก Python binary มี SUID หรือ capability ผู้โจมตีโหลด module ปลอมได้",
+        "risk": "MEDIUM"
+    },
+    "PERL5LIB": {
+        "desc_th": "เพิ่ม directory ค้นหา Perl module คล้ายกับ PYTHONPATH สามารถใช้ inject malicious Perl module",
+        "risk": "MEDIUM"
+    },
+    "RUBYLIB": {
+        "desc_th": "เพิ่ม directory ค้นหา Ruby library สามารถ override standard library ด้วย code ที่เป็นอันตราย",
+        "risk": "MEDIUM"
+    },
+    "JAVA_TOOL_OPTIONS": {
+        "desc_th": "กำหนด JVM options ที่ใช้กับทุก Java process บนระบบ อาจถูกใช้ inject Java agent ที่เป็นอันตราย",
+        "risk": "MEDIUM"
+    },
+    "NODE_OPTIONS": {
+        "desc_th": "กำหนด Node.js runtime options สามารถใช้โหลด malicious module หรือ disable security feature ของ Node",
+        "risk": "MEDIUM"
+    },
+    "DYLD_INSERT_LIBRARIES": {
+        "desc_th": "macOS equivalent ของ LD_PRELOAD บังคับโหลด dynamic library ก่อน library อื่น",
+        "risk": "HIGH"
+    },
+}
 
 # ==============================
 # System Info
@@ -281,14 +433,14 @@ def scan_path():
 
     for idx, directory in enumerate(path_dirs):
         entry = {
-            "directory":     directory,
-            "order":         idx + 1,
-            "exists":        path_exists(directory),
-            "relative":      is_relative_path(directory),
+            "directory":      directory,
+            "order":          idx + 1,
+            "exists":         path_exists(directory),
+            "relative":       is_relative_path(directory),
             "world_writable": False,
-            "owner":         "N/A",
-            "risk":          "OK",
-            "issues":        []
+            "owner":          "N/A",
+            "risk":           "OK",
+            "issues":         []
         }
 
         if entry["relative"]:
@@ -303,10 +455,8 @@ def scan_path():
                 entry["issues"].append("World-writable")
                 entry["risk"] = "HIGH"
 
-            # High-risk position: writable early in PATH (first 3)
             if entry["world_writable"] and idx < 3:
                 entry["issues"].append("Appears early in PATH (position #%d)" % (idx + 1))
-
         else:
             entry["issues"].append("Directory does not exist — phantom PATH entry")
             entry["risk"] = "MEDIUM"
@@ -323,7 +473,7 @@ DANGEROUS_ENV_VARS = [
     "SUDO_EDITOR", "VISUAL", "EDITOR",
     "PYTHONPATH", "PERL5LIB", "RUBYLIB",
     "JAVA_TOOL_OPTIONS", "NODE_OPTIONS",
-    "DYLD_INSERT_LIBRARIES",  # macOS equiv
+    "DYLD_INSERT_LIBRARIES",
 ]
 
 def scan_env_vars():
@@ -331,11 +481,12 @@ def scan_env_vars():
     for var in DANGEROUS_ENV_VARS:
         val = os.environ.get(var)
         if val:
-            risk = "HIGH" if var in ["LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"] else "MEDIUM"
+            info = ENV_VAR_INFO.get(var, {})
             findings.append({
                 "variable": var,
                 "value":    val[:80] + ("..." if len(val) > 80 else ""),
-                "risk":     risk
+                "risk":     info.get("risk", "MEDIUM"),
+                "desc_th":  info.get("desc_th", ""),
             })
     return findings
 
@@ -363,7 +514,6 @@ def scan_suid_binaries():
             if not line:
                 continue
             binary_name = os.path.basename(line).lower()
-            # strip version numbers e.g. python3.10 → python3
             binary_base = binary_name.rstrip("0123456789.-")
 
             dangerous = any(
@@ -379,12 +529,11 @@ def scan_suid_binaries():
     except Exception:
         pass
 
-    # Sort: dangerous first
     results.sort(key=lambda x: (0 if x["dangerous"] else 1, x["binary"]))
     return results
 
 # ==============================
-# Precise CVE Correlation
+# CVE Correlation
 # ==============================
 def correlate_cve(path_findings, env_findings, suid_findings):
     has_writable_path = any(f["world_writable"] for f in path_findings)
@@ -398,7 +547,6 @@ def correlate_cve(path_findings, env_findings, suid_findings):
         t = cve["trigger"]
         matched_reasons = []
 
-        # Check SUID binary requirement
         if t.get("needs_suid_binary"):
             found_suid = [b for b in t["needs_suid_binary"]
                           if any(s.startswith(b) for s in suid_binaries)]
@@ -406,13 +554,11 @@ def correlate_cve(path_findings, env_findings, suid_findings):
                 continue
             matched_reasons.append(f"SUID binary found: {', '.join(found_suid)}")
 
-        # Check any SUID
         if t.get("needs_any_suid") and not has_any_suid:
             continue
         elif t.get("needs_any_suid"):
             matched_reasons.append(f"{len(suid_findings)} SUID binaries present")
 
-        # Check writable PATH requirement
         if t.get("needs_writable_path"):
             if not (has_writable_path or has_relative_path):
                 continue
@@ -421,7 +567,6 @@ def correlate_cve(path_findings, env_findings, suid_findings):
             if has_relative_path:
                 matched_reasons.append("Relative PATH entry detected")
 
-        # Check env var requirement
         if t.get("needs_env_var"):
             found_env = [v for v in t["needs_env_var"] if v in env_vars_present]
             if not found_env:
@@ -492,7 +637,10 @@ def print_env_analysis(findings):
     for f in findings:
         risk_c = Color.RED if f["risk"] == "HIGH" else Color.YELLOW
         print(f"  {c(risk_c + Color.BOLD, '!')}  {c(Color.WHITE + Color.BOLD, f['variable'])} {severity_badge(f['risk'])}")
-        print(f"     {c(Color.GRAY,'value:')} {c(Color.YELLOW, f['value'])}")
+        print(f"     {c(Color.GRAY,'value   :')} {c(Color.YELLOW, f['value'])}")
+        # Thai description
+        if f.get("desc_th"):
+            print(f"     {c(Color.CYAN,'📋 อธิบาย :')} {c(Color.WHITE, f['desc_th'][:90])}{'...' if len(f['desc_th'])>90 else ''}")
 
 def print_suid_analysis(findings):
     dangerous = [f for f in findings if f["dangerous"]]
@@ -522,13 +670,25 @@ def print_cve(cve_findings):
     for entry in cve_findings:
         print(f"\n  {c(Color.RED + Color.BOLD, '✖')}  {c(Color.BOLD + Color.WHITE, entry['cve'])}  "
               f"{c(Color.MAGENTA, entry['name'])}  {severity_badge(entry['severity'])}")
-        print(f"     {c(Color.GRAY,'Category   :')} {c(Color.CYAN, entry['category'])}")
-        print(f"     {c(Color.GRAY,'CVSS Score :')} {cvss_bar(entry['cvss'])}")
-        print(f"     {c(Color.GRAY,'Description:')} {entry['description'][:85]}{'...' if len(entry['description'])>85 else ''}")
+        print(f"     {c(Color.GRAY,'Category    :')} {c(Color.CYAN, entry['category'])}")
+        print(f"     {c(Color.GRAY,'CVSS Score  :')} {cvss_bar(entry['cvss'])}")
+        # English description (short)
+        print(f"     {c(Color.GRAY,'Description :')} {entry['description'][:85]}{'...' if len(entry['description'])>85 else ''}")
+        # Thai vulnerability explanation
+        if entry.get("description_th"):
+            print(f"     {c(Color.CYAN,'📋 ช่องโหว่  :')} {c(Color.WHITE, entry['description_th'][:90])}{'...' if len(entry['description_th'])>90 else ''}")
+        if entry.get("impact_th"):
+            print(f"     {c(Color.ORANGE,'⚡ ผลกระทบ  :')} {c(Color.YELLOW, entry['impact_th'][:90])}{'...' if len(entry['impact_th'])>90 else ''}")
         print(f"     {c(Color.GRAY,'Triggered by:')}")
         for reason in entry["matched_reasons"]:
             print(f"       {c(Color.ORANGE,'→')} {c(Color.YELLOW, reason)}")
-        print(f"     {c(Color.GREEN,'✦  Fix     :')} {c(Color.GRAY, entry['remediation'])}")
+        # Thai prevention tips
+        if entry.get("prevention_th"):
+            print(f"     {c(Color.GREEN + Color.BOLD,'🛡  การป้องกัน:')}")
+            for i, tip in enumerate(entry["prevention_th"], 1):
+                print(f"       {c(Color.GREEN, f'  {i}.')} {c(Color.GRAY, tip[:85])}{'...' if len(tip)>85 else ''}")
+        else:
+            print(f"     {c(Color.GREEN,'✦  Fix      :')} {c(Color.GRAY, entry['remediation'])}")
 
 def print_summary(path_f, env_f, suid_f, cve_f):
     writable_count = sum(1 for f in path_f if f["world_writable"])
@@ -600,8 +760,8 @@ def save_report(path_f, env_f, suid_f, cve_f):
     }
 
     fname = f"cosvinte_path_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    with open(fname, "w") as f:
-        json.dump(report, f, indent=4)
+    with open(fname, "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=4, ensure_ascii=False)
     return fname
 
 # ==============================
