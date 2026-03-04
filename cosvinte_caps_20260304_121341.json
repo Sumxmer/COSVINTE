@@ -1,0 +1,338 @@
+{
+    "tool": "COSVINTE \u2014 Linux Capability Scanner",
+    "timestamp": "2026-03-04T12:13:41.259874",
+    "system": {
+        "hostname": "DESKTOP-LUQQHSO",
+        "distro": "Ubuntu 24.04.4 LTS",
+        "arch": "x86_64"
+    },
+    "summary": {
+        "total_findings": 10,
+        "critical": 3,
+        "high": 3,
+        "medium": 4,
+        "low": 0,
+        "interpreters": 4,
+        "world_writable": 0,
+        "overall_score": 9.7,
+        "overall_cvss": 9.7,
+        "overall_severity": "CRITICAL"
+    },
+    "findings": [
+        {
+            "binary": "/usr/bin/python3.11",
+            "binary_name": "python3.11",
+            "capability": "cap_setuid",
+            "cap_type": "effective",
+            "severity": "CRITICAL",
+            "risk_score": 9.7,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": true,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)",
+                "scripting interpreter \u2014 trivial exploitation"
+            ],
+            "description": "Allows setting arbitrary UID \u2014 attacker can switch to UID 0 (root) at will.",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 UID \u0e40\u0e1b\u0e47\u0e19\u0e04\u0e48\u0e32\u0e43\u0e14\u0e01\u0e47\u0e44\u0e14\u0e49 \u0e23\u0e27\u0e21\u0e16\u0e36\u0e07 UID 0 (root) \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e22\u0e01\u0e23\u0e30\u0e14\u0e31\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e1b\u0e47\u0e19 root \u0e44\u0e14\u0e49\u0e17\u0e31\u0e19\u0e17\u0e35",
+            "impact_th": "\u0e2b\u0e32\u0e01 binary \u0e19\u0e35\u0e49\u0e40\u0e1b\u0e47\u0e19 scripting interpreter \u0e40\u0e0a\u0e48\u0e19 python \u0e2b\u0e23\u0e37\u0e2d perl \u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e23\u0e31\u0e19 os.setuid(0) \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e1b\u0e47\u0e19 root \u0e44\u0e14\u0e49\u0e43\u0e19\u0e17\u0e31\u0e19\u0e17\u0e35",
+            "exploit_hint": "python3 -c 'import os; os.setuid(0); os.system(\"/bin/bash\")'",
+            "cves": [
+                "CVE-2021-4034",
+                "CVE-2019-14287"
+            ],
+            "remediation": "Remove cap_setuid from all non-essential binaries. Audit with: getcap -r / 2>/dev/null",
+            "prevention_th": [
+                "\u0e25\u0e1a cap_setuid \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 interpreter \u0e17\u0e38\u0e01\u0e15\u0e31\u0e27 (python, perl, ruby, node \u0e2f\u0e25\u0e2f) \u0e17\u0e31\u0e19\u0e17\u0e35",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a binary \u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14\u0e14\u0e49\u0e27\u0e22: getcap -r / 2>/dev/null | grep setuid",
+                "\u0e43\u0e0a\u0e49 sudo \u0e17\u0e35\u0e48\u0e01\u0e33\u0e2b\u0e19\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e41\u0e1a\u0e1a least-privilege \u0e41\u0e17\u0e19\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49 capability",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 audit log \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e15\u0e23\u0e27\u0e08\u0e08\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 UID \u0e1c\u0e34\u0e14\u0e1b\u0e01\u0e15\u0e34: auditctl -a always,exit -F arch=b64 -S setuid"
+            ]
+        },
+        {
+            "binary": "/usr/local/bin/custom_tool",
+            "binary_name": "custom_tool",
+            "capability": "cap_sys_admin",
+            "cap_type": "effective",
+            "severity": "CRITICAL",
+            "risk_score": 9.7,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": false,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)"
+            ],
+            "description": "Effectively equivalent to root. Allows mount, pivot_root, kernel module load, arbitrary namespace ops.",
+            "description_th": "\u0e40\u0e17\u0e35\u0e22\u0e1a\u0e40\u0e17\u0e48\u0e32 root \u0e42\u0e14\u0e22\u0e2a\u0e21\u0e1a\u0e39\u0e23\u0e13\u0e4c \u0e0a\u0e48\u0e27\u0e22\u0e43\u0e2b\u0e49\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16 mount filesystem, \u0e42\u0e2b\u0e25\u0e14 kernel module, \u0e08\u0e31\u0e14\u0e01\u0e32\u0e23 namespace \u0e44\u0e14\u0e49\u0e2d\u0e22\u0e48\u0e32\u0e07\u0e2d\u0e34\u0e2a\u0e23\u0e30",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e2b\u0e25\u0e1a\u0e2b\u0e19\u0e35\u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 container, \u0e1d\u0e31\u0e07 rootkit \u0e23\u0e30\u0e14\u0e31\u0e1a kernel, \u0e41\u0e25\u0e30\u0e22\u0e36\u0e14\u0e04\u0e23\u0e2d\u0e07\u0e23\u0e30\u0e1a\u0e1a\u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14\u0e44\u0e14\u0e49",
+            "exploit_hint": "docker escape, kernel module injection, overlay mount abuse",
+            "cves": [
+                "CVE-2022-0492",
+                "CVE-2022-25636",
+                "CVE-2021-22555"
+            ],
+            "remediation": "Remove cap_sys_admin. Use specific caps instead. Never assign to untrusted binaries.",
+            "prevention_th": [
+                "\u0e25\u0e1a cap_sys_admin \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01\u0e17\u0e38\u0e01 binary \u0e17\u0e35\u0e48\u0e44\u0e21\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19",
+                "\u0e43\u0e0a\u0e49 capability \u0e40\u0e09\u0e1e\u0e32\u0e30\u0e40\u0e08\u0e32\u0e30\u0e08\u0e07\u0e41\u0e17\u0e19 \u0e40\u0e0a\u0e48\u0e19 cap_net_admin \u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e07\u0e32\u0e19 network \u0e40\u0e17\u0e48\u0e32\u0e19\u0e31\u0e49\u0e19",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 AppArmor \u0e2b\u0e23\u0e37\u0e2d SELinux \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e08\u0e33\u0e01\u0e31\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e1e\u0e34\u0e48\u0e21\u0e40\u0e15\u0e34\u0e21",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e21\u0e48\u0e33\u0e40\u0e2a\u0e21\u0e2d\u0e14\u0e49\u0e27\u0e22: getcap -r / 2>/dev/null"
+            ]
+        },
+        {
+            "binary": "/usr/bin/node",
+            "binary_name": "node",
+            "capability": "cap_setuid",
+            "cap_type": "effective",
+            "severity": "CRITICAL",
+            "risk_score": 9.7,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": true,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)",
+                "scripting interpreter \u2014 trivial exploitation"
+            ],
+            "description": "Allows setting arbitrary UID \u2014 attacker can switch to UID 0 (root) at will.",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 UID \u0e40\u0e1b\u0e47\u0e19\u0e04\u0e48\u0e32\u0e43\u0e14\u0e01\u0e47\u0e44\u0e14\u0e49 \u0e23\u0e27\u0e21\u0e16\u0e36\u0e07 UID 0 (root) \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e22\u0e01\u0e23\u0e30\u0e14\u0e31\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e1b\u0e47\u0e19 root \u0e44\u0e14\u0e49\u0e17\u0e31\u0e19\u0e17\u0e35",
+            "impact_th": "\u0e2b\u0e32\u0e01 binary \u0e19\u0e35\u0e49\u0e40\u0e1b\u0e47\u0e19 scripting interpreter \u0e40\u0e0a\u0e48\u0e19 python \u0e2b\u0e23\u0e37\u0e2d perl \u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e23\u0e31\u0e19 os.setuid(0) \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e1b\u0e47\u0e19 root \u0e44\u0e14\u0e49\u0e43\u0e19\u0e17\u0e31\u0e19\u0e17\u0e35",
+            "exploit_hint": "python3 -c 'import os; os.setuid(0); os.system(\"/bin/bash\")'",
+            "cves": [
+                "CVE-2021-4034",
+                "CVE-2019-14287"
+            ],
+            "remediation": "Remove cap_setuid from all non-essential binaries. Audit with: getcap -r / 2>/dev/null",
+            "prevention_th": [
+                "\u0e25\u0e1a cap_setuid \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 interpreter \u0e17\u0e38\u0e01\u0e15\u0e31\u0e27 (python, perl, ruby, node \u0e2f\u0e25\u0e2f) \u0e17\u0e31\u0e19\u0e17\u0e35",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a binary \u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14\u0e14\u0e49\u0e27\u0e22: getcap -r / 2>/dev/null | grep setuid",
+                "\u0e43\u0e0a\u0e49 sudo \u0e17\u0e35\u0e48\u0e01\u0e33\u0e2b\u0e19\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e41\u0e1a\u0e1a least-privilege \u0e41\u0e17\u0e19\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49 capability",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 audit log \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e15\u0e23\u0e27\u0e08\u0e08\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 UID \u0e1c\u0e34\u0e14\u0e1b\u0e01\u0e15\u0e34: auditctl -a always,exit -F arch=b64 -S setuid"
+            ]
+        },
+        {
+            "binary": "/usr/bin/node",
+            "binary_name": "node",
+            "capability": "cap_setgid",
+            "cap_type": "effective",
+            "severity": "HIGH",
+            "risk_score": 8.7,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": true,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)",
+                "scripting interpreter \u2014 trivial exploitation"
+            ],
+            "description": "Allows setting arbitrary GID \u2014 attacker can join privileged groups (shadow, disk, docker).",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 GID \u0e40\u0e1b\u0e47\u0e19\u0e04\u0e48\u0e32\u0e43\u0e14\u0e01\u0e47\u0e44\u0e14\u0e49 \u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e40\u0e02\u0e49\u0e32\u0e23\u0e48\u0e27\u0e21 group \u0e17\u0e35\u0e48\u0e21\u0e35\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e2a\u0e39\u0e07 \u0e40\u0e0a\u0e48\u0e19 shadow, disk, \u0e2b\u0e23\u0e37\u0e2d docker",
+            "impact_th": "\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e16\u0e36\u0e07 group 'shadow' \u0e40\u0e1b\u0e34\u0e14\u0e43\u0e2b\u0e49\u0e2d\u0e48\u0e32\u0e19 /etc/shadow \u0e44\u0e14\u0e49 \u0e2a\u0e48\u0e27\u0e19 group 'disk' \u0e40\u0e1b\u0e34\u0e14\u0e43\u0e2b\u0e49\u0e40\u0e02\u0e49\u0e32\u0e16\u0e36\u0e07 raw disk \u0e42\u0e14\u0e22\u0e15\u0e23\u0e07",
+            "exploit_hint": "Switch to GID of 'shadow' group to read /etc/shadow hashes",
+            "cves": [
+                "CVE-2021-4034"
+            ],
+            "remediation": "Remove cap_setgid. Ensure binaries only have minimum required capabilities.",
+            "prevention_th": [
+                "\u0e25\u0e1a cap_setgid \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 binary \u0e17\u0e35\u0e48\u0e44\u0e21\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e15\u0e49\u0e2d\u0e07\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 group",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e21\u0e32\u0e0a\u0e34\u0e01\u0e02\u0e2d\u0e07 group \u0e17\u0e35\u0e48\u0e21\u0e35\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e2a\u0e39\u0e07: getent group shadow disk docker",
+                "\u0e08\u0e33\u0e01\u0e31\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c /etc/shadow \u0e43\u0e2b\u0e49\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e14\u0e49\u0e40\u0e09\u0e1e\u0e32\u0e30 root: chmod 000 /etc/shadow",
+                "\u0e43\u0e0a\u0e49 PAM module \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e08\u0e33\u0e01\u0e31\u0e14\u0e01\u0e32\u0e23\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 group"
+            ]
+        },
+        {
+            "binary": "/usr/bin/perl",
+            "binary_name": "perl",
+            "capability": "cap_dac_override",
+            "cap_type": "effective",
+            "severity": "HIGH",
+            "risk_score": 8.0,
+            "owner": "root",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "binary",
+            "is_interpreter": true,
+            "risk_factors": [
+                "effective capability (immediately usable)",
+                "scripting interpreter \u2014 trivial exploitation"
+            ],
+            "description": "Bypasses all file read/write/execute permission checks \u2014 can read /etc/shadow, /root/.",
+            "description_th": "\u0e02\u0e49\u0e32\u0e21\u0e01\u0e32\u0e23\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e44\u0e1f\u0e25\u0e4c\u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14 (read/write/execute) \u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e2d\u0e48\u0e32\u0e19\u0e2b\u0e23\u0e37\u0e2d\u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e1f\u0e25\u0e4c\u0e43\u0e14\u0e01\u0e47\u0e44\u0e14\u0e49\u0e1a\u0e19\u0e23\u0e30\u0e1a\u0e1a \u0e23\u0e27\u0e21\u0e16\u0e36\u0e07 /etc/shadow \u0e41\u0e25\u0e30 /root/",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e1f\u0e25\u0e4c password hash, \u0e41\u0e01\u0e49\u0e44\u0e02 /etc/passwd \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e1e\u0e34\u0e48\u0e21 backdoor account, \u0e2b\u0e23\u0e37\u0e2d\u0e40\u0e02\u0e35\u0e22\u0e19\u0e17\u0e31\u0e1a binary \u0e17\u0e35\u0e48\u0e21\u0e35 SUID",
+            "exploit_hint": "Read /etc/shadow, overwrite /etc/passwd, modify SUID binaries",
+            "cves": [
+                "CVE-2023-4911",
+                "CVE-2016-1247"
+            ],
+            "remediation": "Remove cap_dac_override. Use ACLs for specific file access instead.",
+            "prevention_th": [
+                "\u0e25\u0e1a cap_dac_override \u0e41\u0e25\u0e30\u0e43\u0e0a\u0e49 POSIX ACL \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e43\u0e2b\u0e49\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e09\u0e1e\u0e32\u0e30\u0e44\u0e1f\u0e25\u0e4c\u0e17\u0e35\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e01\u0e32\u0e23\u0e41\u0e17\u0e19",
+                "\u0e15\u0e31\u0e49\u0e07\u0e04\u0e48\u0e32 immutable flag \u0e43\u0e2b\u0e49\u0e44\u0e1f\u0e25\u0e4c\u0e2a\u0e33\u0e04\u0e31\u0e0d: chattr +i /etc/passwd /etc/shadow",
+                "\u0e43\u0e0a\u0e49 IMA (Integrity Measurement Architecture) \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e15\u0e23\u0e27\u0e08\u0e08\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e41\u0e01\u0e49\u0e44\u0e02\u0e44\u0e1f\u0e25\u0e4c",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a integrity \u0e02\u0e2d\u0e07\u0e44\u0e1f\u0e25\u0e4c\u0e23\u0e30\u0e1a\u0e1a\u0e14\u0e49\u0e27\u0e22 AIDE \u0e2b\u0e23\u0e37\u0e2d Tripwire \u0e40\u0e1b\u0e47\u0e19\u0e1b\u0e23\u0e30\u0e08\u0e33"
+            ]
+        },
+        {
+            "binary": "/usr/bin/vim.basic",
+            "binary_name": "vim.basic",
+            "capability": "cap_dac_read_search",
+            "cap_type": "effective",
+            "severity": "HIGH",
+            "risk_score": 7.0,
+            "owner": "root",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "binary",
+            "is_interpreter": false,
+            "risk_factors": [
+                "effective capability (immediately usable)"
+            ],
+            "description": "Bypasses file read and directory search permission checks \u2014 allows reading any file.",
+            "description_th": "\u0e02\u0e49\u0e32\u0e21\u0e01\u0e32\u0e23\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e01\u0e32\u0e23\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e1f\u0e25\u0e4c\u0e41\u0e25\u0e30\u0e01\u0e32\u0e23\u0e04\u0e49\u0e19\u0e2b\u0e32\u0e43\u0e19 directory \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e1f\u0e25\u0e4c\u0e43\u0e14\u0e01\u0e47\u0e44\u0e14\u0e49\u0e42\u0e14\u0e22\u0e44\u0e21\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e21\u0e35\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e19\u0e33\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e25\u0e31\u0e1a\u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01\u0e23\u0e30\u0e1a\u0e1a \u0e40\u0e0a\u0e48\u0e19 private key, config files, database credentials \u0e42\u0e14\u0e22\u0e44\u0e21\u0e48\u0e17\u0e34\u0e49\u0e07\u0e23\u0e48\u0e2d\u0e07\u0e23\u0e2d\u0e22\u0e43\u0e19\u0e23\u0e30\u0e1a\u0e1a permission \u0e1b\u0e01\u0e15\u0e34",
+            "exploit_hint": "tar -czf /tmp/shadow.tar.gz /etc/shadow",
+            "cves": [
+                "CVE-2014-8990"
+            ],
+            "remediation": "Remove cap_dac_read_search. Restrict to specific backup tools only.",
+            "prevention_th": [
+                "\u0e08\u0e33\u0e01\u0e31\u0e14 cap_dac_read_search \u0e40\u0e09\u0e1e\u0e32\u0e30 backup tool \u0e17\u0e35\u0e48\u0e44\u0e14\u0e49\u0e23\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e41\u0e25\u0e49\u0e27\u0e40\u0e17\u0e48\u0e32\u0e19\u0e31\u0e49\u0e19",
+                "\u0e40\u0e02\u0e49\u0e32\u0e23\u0e2b\u0e31\u0e2a\u0e44\u0e1f\u0e25\u0e4c sensitive \u0e14\u0e49\u0e27\u0e22 encryption at rest \u0e41\u0e21\u0e49\u0e08\u0e30\u0e16\u0e39\u0e01\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e14\u0e49\u0e01\u0e47\u0e44\u0e21\u0e48\u0e21\u0e35\u0e1b\u0e23\u0e30\u0e42\u0e22\u0e0a\u0e19\u0e4c",
+                "\u0e43\u0e0a\u0e49 audit log \u0e15\u0e23\u0e27\u0e08\u0e08\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e16\u0e36\u0e07\u0e44\u0e1f\u0e25\u0e4c sensitive: auditctl -w /etc/shadow -p r",
+                "\u0e41\u0e22\u0e01 sensitive files \u0e44\u0e1b\u0e44\u0e27\u0e49\u0e43\u0e19 filesystem \u0e17\u0e35\u0e48\u0e21\u0e35 access control \u0e40\u0e02\u0e49\u0e21\u0e07\u0e27\u0e14"
+            ]
+        },
+        {
+            "binary": "/usr/sbin/dumpcap",
+            "binary_name": "dumpcap",
+            "capability": "cap_net_admin",
+            "cap_type": "effective",
+            "severity": "MEDIUM",
+            "risk_score": 6.7,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": false,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)"
+            ],
+            "description": "Full network configuration access \u2014 can modify routing, firewall rules, sniff traffic.",
+            "description_th": "\u0e40\u0e02\u0e49\u0e32\u0e16\u0e36\u0e07\u0e01\u0e32\u0e23\u0e15\u0e31\u0e49\u0e07\u0e04\u0e48\u0e32 network \u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14 \u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e41\u0e01\u0e49\u0e44\u0e02 routing table, \u0e01\u0e0e firewall, \u0e41\u0e25\u0e30\u0e14\u0e31\u0e01\u0e1f\u0e31\u0e07 traffic \u0e43\u0e19\u0e23\u0e30\u0e1a\u0e1a",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e25\u0e49\u0e32\u0e07 firewall rules \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e1b\u0e34\u0e14 port, \u0e17\u0e33 ARP spoofing \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e14\u0e31\u0e01\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25, \u0e2b\u0e23\u0e37\u0e2d redirect traffic \u0e44\u0e1b\u0e22\u0e31\u0e07 attacker-controlled server",
+            "exploit_hint": "iptables -F (flush all firewall rules), ARP spoofing, traffic capture",
+            "cves": [
+                "CVE-2020-14386",
+                "CVE-2016-8655"
+            ],
+            "remediation": "Limit to network management daemons only. Never assign to scripting languages.",
+            "prevention_th": [
+                "\u0e08\u0e33\u0e01\u0e31\u0e14 cap_net_admin \u0e40\u0e09\u0e1e\u0e32\u0e30 daemon \u0e17\u0e35\u0e48\u0e08\u0e31\u0e14\u0e01\u0e32\u0e23 network \u0e40\u0e17\u0e48\u0e32\u0e19\u0e31\u0e49\u0e19 (\u0e40\u0e0a\u0e48\u0e19 NetworkManager)",
+                "\u0e2b\u0e49\u0e32\u0e21\u0e01\u0e33\u0e2b\u0e19\u0e14 cap_net_admin \u0e43\u0e2b\u0e49\u0e01\u0e31\u0e1a scripting interpreter \u0e2b\u0e23\u0e37\u0e2d general-purpose tools",
+                "\u0e43\u0e0a\u0e49 network namespace \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e41\u0e22\u0e01 network environment \u0e02\u0e2d\u0e07\u0e41\u0e15\u0e48\u0e25\u0e30 process",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a firewall rules \u0e40\u0e1b\u0e47\u0e19\u0e1b\u0e23\u0e30\u0e08\u0e33: iptables -L -n -v"
+            ]
+        },
+        {
+            "binary": "/usr/bin/tcpdump",
+            "binary_name": "tcpdump",
+            "capability": "cap_net_raw",
+            "cap_type": "effective",
+            "severity": "MEDIUM",
+            "risk_score": 6.2,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": false,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)"
+            ],
+            "description": "Allows raw socket creation \u2014 enables network sniffing, spoofing, and ICMP manipulation.",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e2a\u0e23\u0e49\u0e32\u0e07 raw socket \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e1f\u0e31\u0e07 network traffic, \u0e1b\u0e25\u0e2d\u0e21\u0e41\u0e1b\u0e25\u0e07 packet, \u0e41\u0e25\u0e30\u0e08\u0e31\u0e14\u0e01\u0e32\u0e23 ICMP \u0e44\u0e14\u0e49\u0e42\u0e14\u0e22\u0e15\u0e23\u0e07",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e08\u0e31\u0e1a credentials \u0e17\u0e35\u0e48\u0e2a\u0e48\u0e07\u0e1c\u0e48\u0e32\u0e19 network, \u0e17\u0e33 ARP poisoning \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e17\u0e33 MITM attack, \u0e2b\u0e23\u0e37\u0e2d inject packet \u0e17\u0e35\u0e48\u0e40\u0e1b\u0e47\u0e19\u0e2d\u0e31\u0e19\u0e15\u0e23\u0e32\u0e22",
+            "exploit_hint": "tcpdump credential capture, ARP/ICMP spoofing, packet injection",
+            "cves": [
+                "CVE-2020-14386"
+            ],
+            "remediation": "Limit cap_net_raw to specific tools (ping, tcpdump). Never assign broadly.",
+            "prevention_th": [
+                "\u0e08\u0e33\u0e01\u0e31\u0e14 cap_net_raw \u0e40\u0e09\u0e1e\u0e32\u0e30 tool \u0e17\u0e35\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e08\u0e23\u0e34\u0e07\u0e46 \u0e40\u0e0a\u0e48\u0e19 ping \u0e2b\u0e23\u0e37\u0e2d tcpdump \u0e17\u0e35\u0e48\u0e23\u0e30\u0e1a\u0e38 path \u0e0a\u0e31\u0e14\u0e40\u0e08\u0e19",
+                "\u0e43\u0e0a\u0e49 network encryption (TLS/HTTPS) \u0e17\u0e38\u0e01\u0e17\u0e35\u0e48\u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e25\u0e14\u0e1c\u0e25\u0e01\u0e23\u0e30\u0e17\u0e1a\u0e08\u0e32\u0e01 sniffing",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 Dynamic ARP Inspection \u0e1a\u0e19 switch \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e1b\u0e49\u0e2d\u0e07\u0e01\u0e31\u0e19 ARP spoofing",
+                "Monitor network anomaly \u0e14\u0e49\u0e27\u0e22 IDS \u0e40\u0e0a\u0e48\u0e19 Suricata \u0e2b\u0e23\u0e37\u0e2d Snort"
+            ]
+        },
+        {
+            "binary": "/usr/sbin/dumpcap",
+            "binary_name": "dumpcap",
+            "capability": "cap_net_raw",
+            "cap_type": "effective",
+            "severity": "MEDIUM",
+            "risk_score": 6.2,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": false,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)"
+            ],
+            "description": "Allows raw socket creation \u2014 enables network sniffing, spoofing, and ICMP manipulation.",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e2a\u0e23\u0e49\u0e32\u0e07 raw socket \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e1f\u0e31\u0e07 network traffic, \u0e1b\u0e25\u0e2d\u0e21\u0e41\u0e1b\u0e25\u0e07 packet, \u0e41\u0e25\u0e30\u0e08\u0e31\u0e14\u0e01\u0e32\u0e23 ICMP \u0e44\u0e14\u0e49\u0e42\u0e14\u0e22\u0e15\u0e23\u0e07",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e08\u0e31\u0e1a credentials \u0e17\u0e35\u0e48\u0e2a\u0e48\u0e07\u0e1c\u0e48\u0e32\u0e19 network, \u0e17\u0e33 ARP poisoning \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e17\u0e33 MITM attack, \u0e2b\u0e23\u0e37\u0e2d inject packet \u0e17\u0e35\u0e48\u0e40\u0e1b\u0e47\u0e19\u0e2d\u0e31\u0e19\u0e15\u0e23\u0e32\u0e22",
+            "exploit_hint": "tcpdump credential capture, ARP/ICMP spoofing, packet injection",
+            "cves": [
+                "CVE-2020-14386"
+            ],
+            "remediation": "Limit cap_net_raw to specific tools (ping, tcpdump). Never assign broadly.",
+            "prevention_th": [
+                "\u0e08\u0e33\u0e01\u0e31\u0e14 cap_net_raw \u0e40\u0e09\u0e1e\u0e32\u0e30 tool \u0e17\u0e35\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e08\u0e23\u0e34\u0e07\u0e46 \u0e40\u0e0a\u0e48\u0e19 ping \u0e2b\u0e23\u0e37\u0e2d tcpdump \u0e17\u0e35\u0e48\u0e23\u0e30\u0e1a\u0e38 path \u0e0a\u0e31\u0e14\u0e40\u0e08\u0e19",
+                "\u0e43\u0e0a\u0e49 network encryption (TLS/HTTPS) \u0e17\u0e38\u0e01\u0e17\u0e35\u0e48\u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e25\u0e14\u0e1c\u0e25\u0e01\u0e23\u0e30\u0e17\u0e1a\u0e08\u0e32\u0e01 sniffing",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 Dynamic ARP Inspection \u0e1a\u0e19 switch \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e1b\u0e49\u0e2d\u0e07\u0e01\u0e31\u0e19 ARP spoofing",
+                "Monitor network anomaly \u0e14\u0e49\u0e27\u0e22 IDS \u0e40\u0e0a\u0e48\u0e19 Suricata \u0e2b\u0e23\u0e37\u0e2d Snort"
+            ]
+        },
+        {
+            "binary": "/usr/bin/ping",
+            "binary_name": "ping",
+            "capability": "cap_net_raw",
+            "cap_type": "permitted",
+            "severity": "MEDIUM",
+            "risk_score": 6.0,
+            "owner": "root",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "binary",
+            "is_interpreter": false,
+            "risk_factors": [],
+            "description": "Allows raw socket creation \u2014 enables network sniffing, spoofing, and ICMP manipulation.",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e2a\u0e23\u0e49\u0e32\u0e07 raw socket \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e1f\u0e31\u0e07 network traffic, \u0e1b\u0e25\u0e2d\u0e21\u0e41\u0e1b\u0e25\u0e07 packet, \u0e41\u0e25\u0e30\u0e08\u0e31\u0e14\u0e01\u0e32\u0e23 ICMP \u0e44\u0e14\u0e49\u0e42\u0e14\u0e22\u0e15\u0e23\u0e07",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e08\u0e31\u0e1a credentials \u0e17\u0e35\u0e48\u0e2a\u0e48\u0e07\u0e1c\u0e48\u0e32\u0e19 network, \u0e17\u0e33 ARP poisoning \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e17\u0e33 MITM attack, \u0e2b\u0e23\u0e37\u0e2d inject packet \u0e17\u0e35\u0e48\u0e40\u0e1b\u0e47\u0e19\u0e2d\u0e31\u0e19\u0e15\u0e23\u0e32\u0e22",
+            "exploit_hint": "tcpdump credential capture, ARP/ICMP spoofing, packet injection",
+            "cves": [
+                "CVE-2020-14386"
+            ],
+            "remediation": "Limit cap_net_raw to specific tools (ping, tcpdump). Never assign broadly.",
+            "prevention_th": [
+                "\u0e08\u0e33\u0e01\u0e31\u0e14 cap_net_raw \u0e40\u0e09\u0e1e\u0e32\u0e30 tool \u0e17\u0e35\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e08\u0e23\u0e34\u0e07\u0e46 \u0e40\u0e0a\u0e48\u0e19 ping \u0e2b\u0e23\u0e37\u0e2d tcpdump \u0e17\u0e35\u0e48\u0e23\u0e30\u0e1a\u0e38 path \u0e0a\u0e31\u0e14\u0e40\u0e08\u0e19",
+                "\u0e43\u0e0a\u0e49 network encryption (TLS/HTTPS) \u0e17\u0e38\u0e01\u0e17\u0e35\u0e48\u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e25\u0e14\u0e1c\u0e25\u0e01\u0e23\u0e30\u0e17\u0e1a\u0e08\u0e32\u0e01 sniffing",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 Dynamic ARP Inspection \u0e1a\u0e19 switch \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e1b\u0e49\u0e2d\u0e07\u0e01\u0e31\u0e19 ARP spoofing",
+                "Monitor network anomaly \u0e14\u0e49\u0e27\u0e22 IDS \u0e40\u0e0a\u0e48\u0e19 Suricata \u0e2b\u0e23\u0e37\u0e2d Snort"
+            ]
+        }
+    ]
+}

