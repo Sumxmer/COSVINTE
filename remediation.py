@@ -1,41 +1,15 @@
 #!/usr/bin/env python3
 """
-  COSVINTE — Remediation Roadmap
-  สร้างแผนการแก้ไขที่ prioritize ตาม impact และ effort
-  พร้อม command พร้อมรันและ timeline แนะนำ
+ COSVINTE — Remediation Roadmap
+ prioritize impact effort
+ command timeline 
 """
 
 from datetime import datetime
 
-# ==============================
-# ANSI Colors
-# ==============================
-class Color:
-    RESET   = "\033[0m"
-    BOLD    = "\033[1m"
-    RED     = "\033[91m"
-    YELLOW  = "\033[93m"
-    GREEN   = "\033[92m"
-    CYAN    = "\033[96m"
-    MAGENTA = "\033[95m"
-    WHITE   = "\033[97m"
-    GRAY    = "\033[90m"
-    ORANGE  = "\033[38;5;208m"
-    BG_RED  = "\033[41m"
-    BG_GREEN = "\033[42m"
-    BLUE    = "\033[94m"
-
-def c(color, text):
-    return f"{color}{text}{Color.RESET}"
-
-def severity_badge(sev):
-    colors = {
-        "CRITICAL": Color.BG_RED + Color.BOLD,
-        "HIGH":     Color.RED + Color.BOLD,
-        "MEDIUM":   Color.YELLOW + Color.BOLD,
-        "LOW":      Color.GREEN,
-    }
-    return f"{colors.get(sev, Color.GRAY)} {sev} {Color.RESET}"
+from cosvinte_utils import (
+    Color, c, severity_badge, print_banner as _print_banner,
+)
 
 # ==============================
 # Remediation Action Templates
@@ -45,81 +19,81 @@ REMEDIATION_TEMPLATES = {
 
     # ── Capabilities ──────────────────────────────────────────
     "cap_setuid_interpreter": {
-        "title":    "ลบ cap_setuid ออกจาก Interpreter",
-        "effort":   "LOW",    # เวลาที่ใช้: LOW=<1h, MEDIUM=1d, HIGH=1w
+        "title":    " cap_setuid Interpreter",
+        "effort":   "LOW",    # : LOW=<1h, MEDIUM=1d, HIGH=1w
         "impact":   "CRITICAL",
         "timeline": "immediate",
         "breaks_chains": ["CHAIN-003"],
         "commands": [
-            "# ตรวจสอบก่อน",
+            "# ",
             "getcap -r / 2>/dev/null | grep -E 'python|perl|ruby|node'",
-            "# ลบ capability",
-            "setcap -r /usr/bin/python3  # ปรับ path ตามที่พบ",
+            "# capability",
+            "setcap -r /usr/bin/python3 # path ",
             "setcap -r /usr/bin/perl",
-            "# ยืนยันผล",
-            "getcap /usr/bin/python3   # ต้องไม่มี output",
+            "# ",
+            "getcap /usr/bin/python3 # output",
         ],
         "verify": "getcap -r / 2>/dev/null | grep -E 'setuid|sys_admin'",
-        "description_th": "ลบ cap_setuid/cap_sys_admin ออกจาก scripting interpreter ทุกตัว เพราะเป็น one-shot privesc",
+        "description_th": " cap_setuid/cap_sys_admin scripting interpreter one-shot privesc",
     },
 
     "cap_sys_admin": {
-        "title":    "ลบ cap_sys_admin ออกจาก binary",
+        "title":    " cap_sys_admin binary",
         "effort":   "LOW",
         "impact":   "CRITICAL",
         "timeline": "immediate",
         "breaks_chains": ["CHAIN-003", "CHAIN-007"],
         "commands": [
-            "# ค้นหา binary ที่มี cap_sys_admin",
+            "# binary cap_sys_admin",
             "getcap -r / 2>/dev/null | grep sys_admin",
-            "# ลบออก",
+            "# ",
             "setcap -r <binary_path>",
-            "# ถ้าจำเป็นต้องใช้ ให้ใช้ systemd service restriction แทน",
-            "# ใน unit file: AmbientCapabilities=CAP_NET_ADMIN  (ระบุเฉพาะที่ต้องการ)",
+            "# systemd service restriction ",
+            "# unit file: AmbientCapabilities=CAP_NET_ADMIN ()",
         ],
-        "verify": "getcap -r / 2>/dev/null | grep sys_admin  # ต้องไม่มี output",
-        "description_th": "cap_sys_admin เทียบเท่า root ต้องลบออกทันที ไม่มีกรณีใดที่ควรให้ binary ทั่วไปมี capability นี้",
+        "verify": "getcap -r / 2>/dev/null | grep sys_admin # output",
+        "description_th": "cap_sys_admin root binary capability ",
     },
 
     "cap_dac_override": {
-        "title":    "ลบ cap_dac_override และใช้ ACL แทน",
+        "title":    " cap_dac_override ACL ",
         "effort":   "MEDIUM",
         "impact":   "HIGH",
         "timeline": "week1",
         "breaks_chains": ["CHAIN-007"],
         "commands": [
             "setcap -r <binary_path>",
-            "# ใช้ ACL เพื่อให้สิทธิ์เฉพาะไฟล์ที่ต้องการแทน",
+            "# ACL ",
             "setfacl -m u:<service_user>:r /path/to/specific/file",
-            "# ล็อคไฟล์ sensitive ด้วย immutable flag",
+            "# sensitive immutable flag",
             "chattr +i /etc/passwd /etc/shadow /etc/sudoers",
         ],
         "verify": "lsattr /etc/passwd | grep -i immutable",
-        "description_th": "cap_dac_override ข้ามทุก permission check ควรใช้ ACL ที่เฉพาะเจาะจงแทน",
+        "description_th": "cap_dac_override permission check ACL ",
     },
 
     # ── Cron ──────────────────────────────────────────────────
     "cron_writable_script": {
-        "title":    "แก้ไข Permission ของ Cron Script",
+        "title":    " Permission Cron Script",
         "effort":   "LOW",
         "impact":   "CRITICAL",
         "timeline": "immediate",
         "breaks_chains": ["CHAIN-001", "CHAIN-002"],
         "commands": [
-            "# หา cron script ที่เขียนได้",
+            "# cron script ",
             "find /etc/cron* /var/spool/cron -type f -perm -o+w 2>/dev/null",
-            "# แก้ไข permission",
+            "# permission",
             "chmod 750 <script_path>",
             "chown root:root <script_path>",
-            "# ตรวจสอบ cron job ทั้งหมดที่รันเป็น root",
+            "# cron job root",
             "crontab -l && for u in $(cut -f1 -d: /etc/passwd); do crontab -u $u -l 2>/dev/null && echo \"--- $u ---\"; done",
         ],
-        "verify": "find /etc/cron* -perm -o+w 2>/dev/null  # ต้องไม่มี output",
-        "description_th": "ทุก script ที่ cron รันเป็น root ต้อง owned โดย root และเขียนได้เฉพาะ root เท่านั้น",
+        "verify": "find /etc/cron* -perm -o+w 2>/dev/null # output",
+        "description_th": " script cron root owned root root ",
     },
 
     "cron_log_writable": {
-        "title":    "แก้ไข Permission ของ Cron Log Directory",
+        "title":    " Permission Cron Log Directory",
         "effort":   "LOW",
         "impact":   "HIGH",
         "timeline": "immediate",
@@ -127,54 +101,54 @@ REMEDIATION_TEMPLATES = {
         "commands": [
             "chmod 755 /var/log/cron",
             "chown root:adm /var/log/cron",
-            "# ตรวจสอบ logrotate config",
+            "# logrotate config",
             "grep -r 'create' /etc/logrotate.d/cron",
         ],
-        "verify": "ls -ld /var/log/cron  # ต้องเห็น drwxr-xr-x",
-        "description_th": "Log directory ที่เขียนได้โดยทุกคนเปิดช่องทาง symlink attack ผ่าน logrotate",
+        "verify": "ls -ld /var/log/cron # drwxr-xr-x",
+        "description_th": "Log directory symlink attack logrotate",
     },
 
     # ── PATH Hijack ───────────────────────────────────────────
     "path_writable_dir": {
-        "title":    "แก้ไข Permission ของ PATH Directory",
+        "title":    " Permission PATH Directory",
         "effort":   "LOW",
         "impact":   "CRITICAL",
         "timeline": "immediate",
         "breaks_chains": ["CHAIN-002"],
         "commands": [
-            "# หา directory ใน PATH ที่เขียนได้",
+            "# directory PATH ",
             "for p in $(echo $PATH | tr ':' '\\n'); do ls -ld $p 2>/dev/null; done | grep -E '^d.......w'",
-            "# แก้ไข permission",
+            "# permission",
             "chmod o-w <writable_path_dir>",
             "chown root:root <writable_path_dir>",
-            "# ตรวจสอบว่า PATH ไม่มี relative entry",
+            "# PATH relative entry",
             "echo $PATH | tr ':' '\\n' | grep -E '^\\.' ",
         ],
         "verify": "for p in $(echo $PATH | tr ':' '\\n'); do ls -ld $p; done | grep -v '^drwxr-xr-x'",
-        "description_th": "PATH directory ที่เขียนได้เปิดช่องให้ hijack command ที่รันโดย cron หรือ SUID binary",
+        "description_th": "PATH directory hijack command cron SUID binary",
     },
 
     "path_relative_entry": {
-        "title":    "ลบ Relative Entry ออกจาก PATH",
+        "title":    " Relative Entry PATH",
         "effort":   "LOW",
         "impact":   "HIGH",
         "timeline": "immediate",
         "breaks_chains": ["CHAIN-002", "CHAIN-008"],
         "commands": [
-            "# ตรวจสอบ PATH ปัจจุบัน",
+            "# PATH ",
             "echo $PATH",
-            "# ลบ '.' หรือ relative path ออกจาก /etc/environment, ~/.bashrc, ~/.profile",
+            "# '.' relative path /etc/environment, ~/.bashrc, ~/.profile",
             "grep -n 'PATH' /etc/environment ~/.bashrc ~/.profile /etc/profile",
-            "# แก้ไข: ตัดส่วนที่เป็น relative ออก แล้วรัน",
+            "# : relative ",
             "source ~/.bashrc",
         ],
-        "verify": "echo $PATH | tr ':' '\\n' | grep -E '^\\.'  # ต้องไม่มี output",
-        "description_th": "การมี '.' หรือ relative path ใน PATH ทำให้ hijack คำสั่งในฐานะ user ปัจจุบัน",
+        "verify": "echo $PATH | tr ':' '\\n' | grep -E '^\\.' # output",
+        "description_th": " '.' relative path PATH hijack user ",
     },
 
     # ── Writable Paths ────────────────────────────────────────
     "writable_passwd": {
-        "title":    "แก้ไข Permission ของ /etc/passwd และ /etc/shadow",
+        "title":    " Permission /etc/passwd /etc/shadow",
         "effort":   "LOW",
         "impact":   "CRITICAL",
         "timeline": "immediate",
@@ -184,36 +158,36 @@ REMEDIATION_TEMPLATES = {
             "chmod 640 /etc/shadow",
             "chown root:root /etc/passwd",
             "chown root:shadow /etc/shadow",
-            "# ล็อคด้วย immutable flag",
+            "# immutable flag",
             "chattr +i /etc/passwd /etc/shadow",
-            "# ตรวจสอบ",
+            "# ",
             "ls -la /etc/passwd /etc/shadow",
         ],
         "verify": "ls -la /etc/passwd | grep -E '^-rw-r--r--'",
-        "description_th": "/etc/passwd ที่เขียนได้โดยทุกคนคือ immediate root — ต้องแก้ทันที",
+        "description_th": "/etc/passwd immediate root — ",
     },
 
     "writable_sensitive_dir": {
-        "title":    "แก้ไข Permission ของ Directory ที่ Sensitive",
+        "title":    " Permission Directory Sensitive",
         "effort":   "MEDIUM",
         "impact":   "HIGH",
         "timeline": "week1",
         "breaks_chains": ["CHAIN-001", "CHAIN-006"],
         "commands": [
-            "# หา world-writable directories ใน system path",
+            "# world-writable directories system path",
             "find /etc /usr /bin /sbin -type d -perm -o+w 2>/dev/null",
-            "# แก้ไขแต่ละ directory",
+            "# directory",
             "chmod o-w <directory>",
-            "# ใช้ audit เพื่อ monitor การเปลี่ยนแปลง",
+            "# audit monitor ",
             "auditctl -w /etc -p wa -k etc_changes",
         ],
-        "verify": "find /etc /usr /bin /sbin -type d -perm -o+w 2>/dev/null  # ต้องไม่มี output",
-        "description_th": "Directory ที่เขียนได้ใน system path เปิดช่องให้ hijack library หรือ binary",
+        "verify": "find /etc /usr /bin /sbin -type d -perm -o+w 2>/dev/null # output",
+        "description_th": "Directory system path hijack library binary",
     },
 
     # ── Kernel ────────────────────────────────────────────────
     "kernel_outdated": {
-        "title":    "อัปเดต Kernel เป็นเวอร์ชันล่าสุด",
+        "title":    " Kernel ",
         "effort":   "HIGH",
         "impact":   "CRITICAL",
         "timeline": "week2",
@@ -223,53 +197,53 @@ REMEDIATION_TEMPLATES = {
             "apt update && apt upgrade linux-image-$(uname -r)",
             "# RHEL/CentOS",
             "yum update kernel",
-            "# ตรวจสอบเวอร์ชันหลัง reboot",
+            "# reboot",
             "uname -r",
-            "# ถ้า reboot ไม่ได้ ใช้ kpatch (kernel live patching)",
+            "# reboot kpatch (kernel live patching)",
             "kpatch list",
         ],
-        "verify": "uname -r  # ตรวจสอบว่าเป็น version ใหม่",
-        "description_th": "Kernel ที่มีช่องโหว่ต้องอัปเดตทันที ถ้า reboot ไม่ได้ให้ใช้ kpatch",
+        "verify": "uname -r # version ",
+        "description_th": "Kernel reboot kpatch",
     },
 
     "aslr_disabled": {
-        "title":    "เปิดใช้งาน ASLR",
+        "title":    " ASLR",
         "effort":   "LOW",
         "impact":   "HIGH",
         "timeline": "immediate",
         "breaks_chains": ["CHAIN-005"],
         "commands": [
-            "# เปิด ASLR ทันที (ไม่ต้อง reboot)",
+            "# ASLR ( reboot)",
             "sysctl -w kernel.randomize_va_space=2",
-            "# ทำให้ถาวร",
+            "# ",
             "echo 'kernel.randomize_va_space = 2' >> /etc/sysctl.conf",
             "sysctl -p",
         ],
-        "verify": "cat /proc/sys/kernel/randomize_va_space  # ต้องเป็น 2",
-        "description_th": "ASLR ที่ปิดทำให้ exploit kernel และ heap ง่ายขึ้นมาก เปิดได้ทันทีโดยไม่ต้อง reboot",
+        "verify": "cat /proc/sys/kernel/randomize_va_space # 2",
+        "description_th": "ASLR exploit kernel heap reboot",
     },
 
     # ── General Hardening ─────────────────────────────────────
     "enable_apparmor": {
-        "title":    "เปิดใช้งาน AppArmor/SELinux",
+        "title":    " AppArmor/SELinux",
         "effort":   "HIGH",
         "impact":   "HIGH",
         "timeline": "week2",
         "breaks_chains": [],
         "commands": [
-            "# Ubuntu: เปิด AppArmor",
+            "# Ubuntu: AppArmor",
             "systemctl enable apparmor && systemctl start apparmor",
             "aa-status",
-            "# RHEL/CentOS: เปิด SELinux",
+            "# RHEL/CentOS: SELinux",
             "setenforce 1",
             "sed -i 's/SELINUX=permissive/SELINUX=enforcing/' /etc/selinux/config",
         ],
         "verify": "aa-status --enabled || getenforce",
-        "description_th": "MAC framework ลดความเสี่ยงรวมได้อย่างมาก ควรเปิดใช้งาน",
+        "description_th": "MAC framework ",
     },
 
     "ptrace_restrict": {
-        "title":    "จำกัดสิทธิ์ ptrace",
+        "title":    " ptrace",
         "effort":   "LOW",
         "impact":   "MEDIUM",
         "timeline": "week1",
@@ -279,8 +253,8 @@ REMEDIATION_TEMPLATES = {
             "echo 'kernel.yama.ptrace_scope = 1' >> /etc/sysctl.conf",
             "sysctl -p",
         ],
-        "verify": "cat /proc/sys/kernel/yama/ptrace_scope  # ต้องเป็น 1 หรือ 2",
-        "description_th": "ptrace_scope=0 อนุญาตให้ inject code เข้า process ใดก็ได้ ควรเปลี่ยนเป็น 1",
+        "verify": "cat /proc/sys/kernel/yama/ptrace_scope # 1 2",
+        "description_th": "ptrace_scope=0 inject code process 1",
     },
 }
 
@@ -288,16 +262,16 @@ REMEDIATION_TEMPLATES = {
 # Timeline Definitions
 # ==============================
 TIMELINES = {
-    "immediate": {"label": "ทำทันที (วันนี้)",    "color": Color.BG_RED  + Color.BOLD, "order": 0},
-    "week1":     {"label": "ภายใน 1 สัปดาห์",     "color": Color.RED    + Color.BOLD, "order": 1},
-    "week2":     {"label": "ภายใน 2 สัปดาห์",     "color": Color.ORANGE + Color.BOLD, "order": 2},
-    "month1":    {"label": "ภายใน 1 เดือน",        "color": Color.YELLOW,             "order": 3},
+    "immediate": {"label": " ()",    "color": Color.BG_RED  + Color.BOLD, "order": 0},
+    "week1":     {"label": " 1 ",     "color": Color.RED    + Color.BOLD, "order": 1},
+    "week2":     {"label": " 2 ",     "color": Color.ORANGE + Color.BOLD, "order": 2},
+    "month1":    {"label": " 1 ",        "color": Color.YELLOW,             "order": 3},
 }
 
 EFFORT_LABELS = {
-    "LOW":    c(Color.GREEN  + Color.BOLD, "LOW    (< 1 ชั่วโมง)"),
-    "MEDIUM": c(Color.YELLOW + Color.BOLD, "MEDIUM (< 1 วัน)    "),
-    "HIGH":   c(Color.RED    + Color.BOLD, "HIGH   (> 1 วัน)    "),
+    "LOW":    c(Color.GREEN  + Color.BOLD, "LOW (< 1 )"),
+    "MEDIUM": c(Color.YELLOW + Color.BOLD, "MEDIUM (< 1 ) "),
+    "HIGH":   c(Color.RED    + Color.BOLD, "HIGH (> 1 ) "),
 }
 
 # ==============================
@@ -351,20 +325,20 @@ def _finding_to_remediation_keys(finding: dict, scanner: str) -> list:
 
 def build_roadmap(scored_reports: dict, chains: list) -> list:
     """
-    รับ scored_reports และ chains
-    คืน list ของ remediation actions เรียงตาม priority
-    """
+ scored_reports chains
+ list remediation actions priority
+ """
     seen_keys = set()
     actions   = []
 
-    # รวบรวม chains ที่แต่ละ action แก้ได้
+    # chains action 
     chain_broken_by = {}
     for chain in chains:
         for key, tmpl in REMEDIATION_TEMPLATES.items():
             if chain["id"] in tmpl.get("breaks_chains", []):
                 chain_broken_by.setdefault(key, []).append(chain["id"])
 
-    # สร้าง actions จาก findings
+    # actions findings
     for scanner, report in scored_reports.items():
         if scanner.startswith("_") or not report:
             continue
@@ -396,7 +370,7 @@ def build_roadmap(scored_reports: dict, chains: list) -> list:
                         "trigger_finding": (finding.get("cve") or finding.get("binary") or finding.get("path") or ""),
                     })
 
-    # เพิ่ม general hardening ถ้ายังไม่มี
+    # general hardening 
     context_factors = scored_reports.get("_context_factors", {})
     if context_factors.get("aslr", {}).get("status") != "enabled":
         if "aslr_disabled" not in seen_keys:
@@ -410,7 +384,7 @@ def build_roadmap(scored_reports: dict, chains: list) -> list:
                             "key": "enable_apparmor", "trigger_score": 0, "trigger_finding": "No MAC",
                             "breaks_chains": []})
 
-    # เรียง: immediate ก่อน, แล้ว impact, แล้ว effort (LOW ก่อน)
+    # : immediate , impact, effort (LOW )
     tl_order     = {t: v["order"] for t, v in TIMELINES.items()}
     impact_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
     effort_order = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
@@ -426,20 +400,11 @@ def build_roadmap(scored_reports: dict, chains: list) -> list:
 # Pretty Printing
 # ==============================
 def print_banner():
-    print(f"""
-{Color.CYAN}{Color.BOLD}
- ██████╗ ██████╗ ███████╗██╗   ██╗██╗███╗   ██╗████████╗███████╗
-██╔════╝██╔═══██╗██╔════╝██║   ██║██║████╗  ██║╚══██╔══╝██╔════╝
-██║     ██║   ██║███████╗██║   ██║██║██╔██╗ ██║   ██║   █████╗
-██║     ██║   ██║╚════██║╚██╗ ██╔╝██║██║╚██╗██║   ██║   ██╔══╝
-╚██████╗╚██████╔╝███████║ ╚████╔╝ ██║██║ ╚████║   ██║   ███████╗
- ╚═════╝ ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝{Color.RESET}
-{Color.GRAY}  Remediation Roadmap  |  "Conquer Vulnerabilities"{Color.RESET}
-""")
+    _print_banner('Remediation Roadmap  |  "Conquer Vulnerabilities"')
 
 def print_roadmap(actions: list):
     if not actions:
-        print(c(Color.GREEN + Color.BOLD, "\n  ✔  ไม่พบ remediation actions ที่จำเป็น\n"))
+        print(c(Color.GREEN + Color.BOLD, "\n ✔ remediation actions \n"))
         return
 
     # Group by timeline
@@ -449,7 +414,7 @@ def print_roadmap(actions: list):
         grouped.setdefault(tl, []).append(a)
 
     print(c(Color.CYAN + Color.BOLD, f"\n  ╔══ REMEDIATION ROADMAP ({len(actions)} actions) ════════════════════╗"))
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY, 'เรียงตาม: timeline → impact → effort (LOW effort ก่อน)')}")
+    print(f" {c(Color.CYAN,'║')} {c(Color.GRAY, ': timeline → impact → effort (LOW effort )')}")
     print(c(Color.CYAN + Color.BOLD,  "  ╚══════════════════════════════════════════════════════════════╝\n"))
 
     global_idx = 1
@@ -481,7 +446,7 @@ def print_roadmap(actions: list):
             if action.get("trigger_finding"):
                 print(f"        Trigger : {c(Color.MAGENTA, str(action['trigger_finding'])[:60])}")
 
-            # Chains ที่จะ break
+            # Chains break
             if action["breaks_chains"]:
                 chains_str = c(Color.ORANGE + Color.BOLD, ", ".join(action["breaks_chains"]))
                 print(f"        Breaks  : ⚡ {chains_str}  {c(Color.GRAY, '(attack chains)')}")
@@ -508,7 +473,7 @@ def print_summary(actions: list, chains: list):
     week1     = sum(1 for a in actions if a["timeline"] == "week1")
     week2_plus = sum(1 for a in actions if a["timeline"] in ("week2", "month1"))
 
-    # chains ที่ถูก break โดย actions ทั้งหมด
+    # chains break actions 
     all_broken = set()
     for a in actions:
         all_broken.update(a.get("breaks_chains", []))
@@ -517,17 +482,17 @@ def print_summary(actions: list, chains: list):
 
     print(f"\n{c(Color.CYAN + Color.BOLD, '  ╔══ ROADMAP SUMMARY ══════════════════════════════════════════╗')}")
     print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Total Actions          :')} {c(Color.WHITE + Color.BOLD, str(len(actions)))}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.BG_RED  + Color.BOLD,'  ทำทันที              :')} {c(Color.RED   + Color.BOLD, str(immediate))}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.ORANGE  + Color.BOLD,'  ภายใน 1 สัปดาห์    :')} {c(Color.ORANGE+ Color.BOLD, str(week1))}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.YELLOW,              '  ภายใน 2+ สัปดาห์  :')} {c(Color.YELLOW+ Color.BOLD, str(week2_plus))}")
+    print(f" {c(Color.CYAN,'║')} {c(Color.BG_RED + Color.BOLD,' :')} {c(Color.RED + Color.BOLD, str(immediate))}")
+    print(f" {c(Color.CYAN,'║')} {c(Color.ORANGE + Color.BOLD,' 1 :')} {c(Color.ORANGE+ Color.BOLD, str(week1))}")
+    print(f" {c(Color.CYAN,'║')} {c(Color.YELLOW, ' 2+ :')} {c(Color.YELLOW+ Color.BOLD, str(week2_plus))}")
     print(f"  {c(Color.CYAN,'║')}")
     print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Attack Chains Broken   :')} "
           f"{c(Color.GREEN + Color.BOLD, str(chains_broken))} / {c(Color.WHITE, str(chains_total))}")
     print(f"  {c(Color.CYAN,'║')}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.YELLOW,'💡 เริ่มจาก [01] ก่อน — action แรกสุดมี impact สูงสุด')}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.YELLOW,'   ต่อยอดด้วย Context-Aware Scoring เพื่อดู risk จริง')}")
+    print(f" {c(Color.CYAN,'║')} {c(Color.YELLOW,'💡 [01] — action impact ')}")
+    print(f" {c(Color.CYAN,'║')} {c(Color.YELLOW,' Context-Aware Scoring risk ')}")
     print(c(Color.CYAN + Color.BOLD, '  ╚══════════════════════════════════════════════════════════════╝\n'))
 
 def roadmap_to_report_dict(actions: list) -> list:
-    """แปลง actions เป็น list ที่ JSON serializable"""
+    """ actions list JSON serializable"""
     return [{k: v for k, v in a.items()} for a in actions]

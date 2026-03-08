@@ -31,6 +31,24 @@ import importlib.util
 import argparse
 from datetime import datetime
 
+from cosvinte_utils import (
+    Color as _C, c as cc, system_info as _system_info,
+    save_json as _save_json, score_to_severity as _sev_from_score,
+    separator as _separator_fn,
+)
+
+# Shorthand color constants used throughout this file
+R  = _C.RESET
+B  = _C.BOLD
+CY = _C.CYAN
+GR = _C.GREEN
+YE = _C.YELLOW
+RE = _C.RED
+GY = _C.GRAY
+MA = _C.MAGENTA
+WH = _C.WHITE
+BG_RED = _C.BG_RED
+
 # ─────────────────────────────────────────────────────
 # Resolve sibling module paths
 # ─────────────────────────────────────────────────────
@@ -45,23 +63,6 @@ def _load(filename, alias):
     mod  = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
-
-# ─────────────────────────────────────────────────────
-# ANSI helpers (self-contained so we don't depend on
-# any specific scanner's Color class)
-# ─────────────────────────────────────────────────────
-R  = "\033[0m"
-B  = "\033[1m"
-CY = "\033[96m"
-GR = "\033[92m"
-YE = "\033[93m"
-RE = "\033[91m"
-GY = "\033[90m"
-MA = "\033[95m"
-WH = "\033[97m"
-BG_RED = "\033[41m"
-
-def cc(col, text): return f"{col}{text}{R}"
 
 BANNER = f"""
 {CY}{B}
@@ -103,43 +104,9 @@ def _load_remediation():
         print(cc(YE, "  Remediation Roadmap disabled."))
     return mod
 
-# Shared report-building helpers
 # ─────────────────────────────────────────────────────
-def _sev_from_score(score):
-    if score >= 9.0: return "CRITICAL"
-    if score >= 7.0: return "HIGH"
-    if score >= 4.0: return "MEDIUM"
-    if score > 0:    return "LOW"
-    return "NONE"
-
-def _system_info():
-    def _distro():
-        import subprocess
-        try:
-            r = subprocess.run(["lsb_release", "-d"], capture_output=True, text=True)
-            return r.stdout.replace("Description:", "").strip()
-        except:
-            pass
-        try:
-            with open("/etc/os-release") as f:
-                for line in f:
-                    if line.startswith("PRETTY_NAME"):
-                        return line.split("=", 1)[1].strip().strip('"')
-        except:
-            pass
-        return "Unknown"
-    return {
-        "hostname": platform.node(),
-        "distro":   _distro(),
-        "arch":     platform.machine(),
-    }
-
-def _save_json(report, prefix):
-    ts    = datetime.now().strftime("%Y%m%d_%H%M%S")
-    fname = f"{prefix}_{ts}.json"
-    with open(fname, "w") as fh:
-        json.dump(report, fh, indent=4)
-    return fname
+# Shared report-building helpers (thin wrappers)
+# ─────────────────────────────────────────────────────
 
 def _generate_pdf(pdf_mod, report, prefix):
     ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -566,21 +533,21 @@ def _combined_report(reports: list) -> dict:
 # ══════════════════════════════════════════════════════
 # ─────────────────────────────────────────────────────
 def run_all_plus(pdf_mod=None):
-    """รันทุก scanner แล้วต่อด้วย Attack Chain, Risk Scoring, Remediation Roadmap"""
+    """Run all scanners then proceed with Attack Chain, Risk Scoring, and Remediation Roadmap."""
 
-    # โหลด modules ใหม่
+    # Load modules
     ac_mod   = _load_attack_chain()
     rs_mod   = _load_risk_scoring()
     rem_mod  = _load_remediation()
 
-    # รันทุก scanner เก็บ reports
+    # Run all scanners and collect reports
     reports_list = []
     reports_dict = {}
     for _, _, key in MENU_ITEMS:
         if key in RUNNER_MAP:
             _separator()
             print(cc(MA+B, f"\n  ▸  Running {key.upper()} scanner ...\n"))
-            r = RUNNER_MAP[key](None)   # ไม่ generate PDF ตอนนี้
+            r = RUNNER_MAP[key](None)   # PDF will be generated later
             reports_list.append(r)
             if r:
                 reports_dict[key] = r
@@ -624,7 +591,7 @@ def run_all_plus(pdf_mod=None):
     # ── Combined Report ──
     combined = _combined_report(reports_list)
 
-    # เพิ่ม analysis results เข้า combined report
+    # Add analysis results into combined report
     if ac_mod and chains:
         combined["attack_chains"] = ac_mod.chains_to_report_dict(chains)
     if rem_mod and actions:
@@ -675,7 +642,7 @@ RUNNER_MAP = {
 # all_plus is handled separately (not in RUNNER_MAP to avoid recursion)
 
 def _separator():
-    print(cc(GY, "  " + "─" * 58))
+    _separator_fn()
 
 def _menu_header():
     print(f"\n{CY}{B}  ╔══ SCANNER MENU ══════════════════════════════════════╗{R}")

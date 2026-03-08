@@ -20,45 +20,14 @@ import pwd
 from datetime import datetime
 from packaging import version
 
-# ==============================
-# ANSI Colors
-# ==============================
-class Color:
-    RESET   = "\033[0m"
-    BOLD    = "\033[1m"
-    RED     = "\033[91m"
-    YELLOW  = "\033[93m"
-    GREEN   = "\033[92m"
-    CYAN    = "\033[96m"
-    MAGENTA = "\033[95m"
-    WHITE   = "\033[97m"
-    GRAY    = "\033[90m"
-    ORANGE  = "\033[38;5;208m"
-    BG_RED  = "\033[41m"
-
-def c(color, text):
-    return f"{color}{text}{Color.RESET}"
-
-def severity_badge(sev):
-    colors = {
-        "CRITICAL": Color.BG_RED + Color.BOLD,
-        "HIGH":     Color.RED + Color.BOLD,
-        "MEDIUM":   Color.YELLOW,
-        "LOW":      Color.GREEN,
-    }
-    return f"{colors.get(sev, Color.GRAY)} {sev} {Color.RESET}"
-
-def cvss_bar(score, width=20):
-    filled = int((score / 10.0) * width)
-    bar = "█" * filled + "░" * (width - filled)
-    color = Color.RED if score >= 7 else (Color.YELLOW if score >= 4 else Color.GREEN)
-    return f"{color}{bar}{Color.RESET} {Color.BOLD}{score:.1f}{Color.RESET}"
+from cosvinte_utils import (
+    Color, c, severity_badge, cvss_bar,
+    get_distro, save_json, print_banner as _print_banner,
+)
 
 def severity_from_cvss(score):
-    if score >= 9.0: return "CRITICAL"
-    if score >= 7.0: return "HIGH"
-    if score >= 4.0: return "MEDIUM"
-    return "LOW"
+    from cosvinte_utils import score_to_severity
+    return score_to_severity(score)
 
 # ==============================
 # CVE Database
@@ -72,15 +41,15 @@ CVE_DB = [
         "cvss": 7.8,
         "category": "File Permission",
         "description": "World-writable /var/log/cron allows local users to replace log files with symlinks via logrotate, leading to root privilege escalation.",
-        "description_th": "หาก /var/log/cron เขียนได้โดยทุกคน ผู้ใช้ทั่วไปสามารถแทนที่ log file ด้วย symlink เพื่อให้ logrotate ซึ่งรันเป็น root เขียนทับไฟล์เป้าหมาย",
-        "impact_th": "ผู้โจมตีสร้าง symlink /var/log/cron → /etc/passwd แล้วรอ logrotate รันตามตาราง → /etc/passwd ถูก overwrite → เพิ่ม root account ได้",
+        "description_th": " /var/log/cron log file symlink logrotate root ",
+        "impact_th": " symlink /var/log/cron → /etc/passwd logrotate → /etc/passwd overwrite → root account ",
         "check": "log_permission",
         "remediation": "chmod 755 /var/log/cron && chown root:adm /var/log/cron",
         "prevention_th": [
-            "แก้ permission ทันที: chmod 755 /var/log/cron && chown root:adm /var/log/cron",
-            "ตรวจสอบ logrotate config: grep -r 'create' /etc/logrotate.d/cron",
-            "Monitor symlink ใน log dir: auditctl -w /var/log/cron -p wa -k cron_log",
-            "ใช้ ACL แทนการ world-writable: setfacl -m u:cron:rw /var/log/cron",
+            " permission : chmod 755 /var/log/cron && chown root:adm /var/log/cron",
+            " logrotate config: grep -r 'create' /etc/logrotate.d/cron",
+            "Monitor symlink log dir: auditctl -w /var/log/cron -p wa -k cron_log",
+            " ACL world-writable: setfacl -m u:cron:rw /var/log/cron",
         ],
     },
     {
@@ -91,14 +60,14 @@ CVE_DB = [
         "cvss": 7.2,
         "category": "Memory Corruption",
         "description": "Use-after-free in Cronie allows local users to cause denial of service or escalate privileges via malformed crontab.",
-        "description_th": "ช่องโหว่ use-after-free ใน cronie เกิดจากการ free memory ก่อนที่จะใช้งานเสร็จ ทำให้ผู้โจมตีสามารถเขียนทับ memory ที่ถูก free ไปแล้วเพื่อควบคุม execution",
-        "impact_th": "ผู้โจมตีสร้าง crontab ที่มี format พิเศษเพื่อ trigger use-after-free → cronie crash (DoS) หรือ execute arbitrary code ในฐานะ cron daemon ซึ่งรันเป็น root",
+        "description_th": " use-after-free cronie free memory memory free execution",
+        "impact_th": " crontab format trigger use-after-free → cronie crash (DoS) execute arbitrary code cron daemon root",
         "check": "symlink_check",
         "remediation": "Upgrade cronie >= 1.5.3",
         "prevention_th": [
-            "อัปเกรด cronie ทันที: apt upgrade cron หรือ yum upgrade cronie",
-            "ตรวจสอบเวอร์ชัน: cron --version หรือ dpkg -l cron",
-            "จำกัดสิทธิ์การแก้ไข crontab เฉพาะ user ที่จำเป็น: /etc/cron.allow",
+            " cronie : apt upgrade cron yum upgrade cronie",
+            ": cron --version dpkg -l cron",
+            " crontab user : /etc/cron.allow",
             "Monitor crontab changes: auditctl -w /var/spool/cron -p wa -k crontab_mod",
         ],
     },
@@ -110,15 +79,15 @@ CVE_DB = [
         "cvss": 6.5,
         "category": "Permission",
         "description": "Cron sets SGID on crontab binary, allowing members of the crontab group to escalate privileges.",
-        "description_th": "Vixie cron ตั้ง SGID bit บน /usr/bin/crontab ทำให้สมาชิกของ group 'crontab' สามารถใช้ crontab ในฐานะ group crontab และยกระดับสิทธิ์ได้",
-        "impact_th": "ผู้โจมตีที่อยู่ใน group 'crontab' สามารถแก้ไข crontab ของ user อื่นหรือใช้ประโยชน์จาก SGID เพื่อเข้าถึงไฟล์ที่ group crontab เป็นเจ้าของ",
+        "description_th": "Vixie cron SGID bit /usr/bin/crontab group 'crontab' crontab group crontab ",
+        "impact_th": " group 'crontab' crontab user SGID group crontab ",
         "check": "crontab_sgid",
         "remediation": "chmod g-s /usr/bin/crontab && upgrade vixie-cron",
         "prevention_th": [
-            "ถอด SGID bit: chmod g-s /usr/bin/crontab",
-            "ตรวจสอบสมาชิก group crontab: getent group crontab",
-            "ลบ user ที่ไม่จำเป็นออกจาก crontab group: gpasswd -d username crontab",
-            "อัปเกรด vixie-cron เป็นเวอร์ชันล่าสุด",
+            " SGID bit: chmod g-s /usr/bin/crontab",
+            " group crontab: getent group crontab",
+            " user crontab group: gpasswd -d username crontab",
+            " vixie-cron ",
         ],
     },
     {
@@ -129,15 +98,15 @@ CVE_DB = [
         "cvss": 7.5,
         "category": "Access Control",
         "description": "dcron allows local users to run cron jobs as other users due to insufficient permission checks.",
-        "description_th": "dcron ตรวจสอบ permission ไม่เพียงพอ ทำให้ผู้ใช้ทั่วไปสามารถรัน cron job ในฐานะ user อื่นได้ รวมถึง root",
-        "impact_th": "ผู้โจมตีสร้าง crontab entry ที่ระบุ user อื่นเป็นเจ้าของ job → dcron รัน command ในฐานะ user นั้นโดยไม่ตรวจสอบสิทธิ์ → ได้ shell ในฐานะ root",
+        "description_th": "dcron permission cron job user root",
+        "impact_th": " crontab entry user job → dcron command user → shell root",
         "check": "version_only",
         "remediation": "Upgrade dcron >= 4.5",
         "prevention_th": [
-            "อัปเกรด dcron เป็นเวอร์ชัน 4.5 ขึ้นไปทันที",
-            "พิจารณาเปลี่ยนไปใช้ cronie หรือ debian cron ที่มีการ maintain ดีกว่า",
-            "จำกัด user ที่ใช้ cron ได้ผ่าน /etc/cron.allow: echo 'root' > /etc/cron.allow",
-            "Monitor การรัน cron job ของ user ต่างๆ: grep CRON /var/log/syslog",
+            " dcron 4.5 ",
+            " cronie debian cron maintain ",
+            " user cron /etc/cron.allow: echo 'root' > /etc/cron.allow",
+            "Monitor cron job user : grep CRON /var/log/syslog",
         ],
     },
     {
@@ -148,15 +117,15 @@ CVE_DB = [
         "cvss": 8.4,
         "category": "Buffer Overflow",
         "description": "Buffer overflow in cronie crontab parsing allows local privilege escalation.",
-        "description_th": "ช่องโหว่ buffer overflow ใน cronie เกิดระหว่างการ parse crontab file ผู้โจมตีสามารถสร้าง crontab entry ที่มีขนาดพิเศษเพื่อ overflow buffer และควบคุม execution flow",
-        "impact_th": "ผู้โจมตีสร้าง crontab ที่มี field ยาวเกิน buffer ที่กำหนด → stack/heap overflow → overwrite return address → execute shellcode ในฐานะ crond daemon (root)",
+        "description_th": " buffer overflow cronie parse crontab file crontab entry overflow buffer execution flow",
+        "impact_th": " crontab field buffer → stack/heap overflow → overwrite return address → execute shellcode crond daemon (root)",
         "check": "version_only",
         "remediation": "Upgrade cronie >= 1.6.1",
         "prevention_th": [
-            "อัปเกรด cronie เป็นเวอร์ชัน 1.6.1 ขึ้นไปทันที: apt upgrade cron",
-            "ตรวจสอบเวอร์ชันปัจจุบัน: dpkg -l cron | grep cron",
-            "จำกัดการเขียน crontab เฉพาะ user ที่จำเป็น: chmod 600 /var/spool/cron/crontabs/*",
-            "เปิดใช้ stack protection: ตรวจสอบว่า kernel มี ASLR: cat /proc/sys/kernel/randomize_va_space",
+            " cronie 1.6.1 : apt upgrade cron",
+            ": dpkg -l cron | grep cron",
+            " crontab user : chmod 600 /var/spool/cron/crontabs/*",
+            " stack protection: kernel ASLR: cat /proc/sys/kernel/randomize_va_space",
         ],
     },
     {
@@ -167,16 +136,16 @@ CVE_DB = [
         "cvss": 7.8,
         "category": "ENV Injection",
         "description": "Cron jobs that execute pkexec or polkit-dependent scripts are vulnerable to environment variable injection leading to root escalation.",
-        "description_th": "Cron job ที่เรียก pkexec หรือ script ที่ใช้ polkit มีความเสี่ยงต่อการ inject environment variable เนื่องจาก pkexec มีช่องโหว่ในการจัดการ argv/envp",
-        "impact_th": "ผู้โจมตีตั้ง environment variable ก่อน cron job รัน → cron เรียก pkexec → pkexec โหลด malicious shared object จาก env var → ได้ root shell ทันที",
+        "description_th": "Cron job pkexec script polkit inject environment variable pkexec argv/envp",
+        "impact_th": " environment variable cron job → cron pkexec → pkexec malicious shared object env var → root shell ",
         "check": "cron_env_injection",
         "remediation": "Audit cron jobs for pkexec usage. Upgrade polkit >= 0.120.",
         "prevention_th": [
-            "อัปเกรด polkit ทันที: apt upgrade policykit-1",
-            "ตรวจสอบ cron job ที่เรียก pkexec: grep -r 'pkexec' /etc/cron*",
-            "แทนที่ pkexec ด้วย sudo ที่กำหนด policy ชัดเจน",
-            "ถอด SUID จาก pkexec ชั่วคราว: chmod 0755 /usr/bin/pkexec",
-            "ตรวจสอบ env var ที่ cron ส่งต่อ: env_reset ใน /etc/sudoers",
+            " polkit : apt upgrade policykit-1",
+            " cron job pkexec: grep -r 'pkexec' /etc/cron*",
+            " pkexec sudo policy ",
+            " SUID pkexec : chmod 0755 /usr/bin/pkexec",
+            " env var cron : env_reset /etc/sudoers",
         ],
     },
     {
@@ -187,15 +156,15 @@ CVE_DB = [
         "cvss": 7.8,
         "category": "Kernel",
         "description": "World-writable cron log files combined with Dirty Pipe kernel vulnerability allow overwriting read-only files as root.",
-        "description_th": "หาก cron log file เขียนได้โดยทุกคน ร่วมกับช่องโหว่ Dirty Pipe ใน kernel ผู้โจมตีสามารถเขียนทับ read-only file ผ่าน pipe buffer ที่ cron เปิดไว้",
-        "impact_th": "ผู้โจมตีใช้ writable cron log เป็น file descriptor ที่เปิดไว้แล้ว trigger Dirty Pipe → เขียนทับ SUID binary หรือ /etc/passwd → ได้ root",
+        "description_th": " cron log file Dirty Pipe kernel read-only file pipe buffer cron ",
+        "impact_th": " writable cron log file descriptor trigger Dirty Pipe → SUID binary /etc/passwd → root",
         "check": "log_permission",
         "remediation": "chmod 640 /var/log/cron && Upgrade kernel >= 5.16.11",
         "prevention_th": [
-            "แก้ permission cron log: chmod 640 /var/log/cron && chown root:adm /var/log/cron",
-            "อัปเกรด kernel เป็นเวอร์ชัน 5.16.11, 5.15.25, หรือ 5.10.102: apt upgrade linux-image-$(uname -r)",
-            "ตรวจสอบเวอร์ชัน kernel: uname -r",
-            "ใช้ IMA เพื่อตรวจจับการแก้ไข SUID binary",
+            " permission cron log: chmod 640 /var/log/cron && chown root:adm /var/log/cron",
+            " kernel 5.16.11, 5.15.25, 5.10.102: apt upgrade linux-image-$(uname -r)",
+            " kernel: uname -r",
+            " IMA SUID binary",
         ],
     },
     {
@@ -206,16 +175,16 @@ CVE_DB = [
         "cvss": 7.0,
         "category": "Temp File",
         "description": "Cron creates temporary files insecurely in /tmp, allowing symlink attacks by local users to overwrite arbitrary files.",
-        "description_th": "Cron สร้าง temporary file ใน /tmp โดยไม่ตรวจสอบ symlink attack ทำให้ผู้โจมตีสร้าง symlink ที่มีชื่อเดียวกับ temp file ไว้ล่วงหน้า แล้วให้ cron เขียนทับไฟล์เป้าหมาย",
-        "impact_th": "ผู้โจมตีสร้าง /tmp/cron_tmp_XXXX → /etc/shadow ไว้ก่อน → เมื่อ cron สร้าง temp file ชื่อเดียวกัน จะ follow symlink → เขียนทับ /etc/shadow ด้วย content ที่ควบคุมได้",
+        "description_th": "Cron temporary file /tmp symlink attack symlink temp file cron ",
+        "impact_th": " /tmp/cron_tmp_XXXX → /etc/shadow → cron temp file follow symlink → /etc/shadow content ",
         "check": "world_writable_tmp",
         "remediation": "Ensure /tmp has sticky bit: chmod 1777 /tmp",
         "prevention_th": [
-            "ตั้ง sticky bit บน /tmp: chmod 1777 /tmp",
-            "Mount /tmp ด้วย noexec,nosuid: mount -o remount,noexec,nosuid /tmp",
-            "ใช้ mkstemp() แทน tempnam() ใน script (สำหรับ developer)",
-            "อัปเกรด cron เป็นเวอร์ชันที่ใช้ mkstemp() อย่างถูกต้อง",
-            "ตรวจสอบ cron script ที่สร้างไฟล์ใน /tmp: grep -r '/tmp' /etc/cron*",
+            " sticky bit /tmp: chmod 1777 /tmp",
+            "Mount /tmp noexec,nosuid: mount -o remount,noexec,nosuid /tmp",
+            " mkstemp() tempnam() script ( developer)",
+            " cron mkstemp() ",
+            " cron script /tmp: grep -r '/tmp' /etc/cron*",
         ],
     },
     {
@@ -226,16 +195,16 @@ CVE_DB = [
         "cvss": 8.0,
         "category": "Symlink",
         "description": "Malicious symlinks in /etc/cron.d allow cron to execute attacker-controlled files as root.",
-        "description_th": "หาก /etc/cron.d มี symlink ที่ผู้โจมตีสร้างไว้ cron daemon จะ follow symlink และ execute ไฟล์ปลายทางในฐานะ root โดยไม่ตรวจสอบความปลอดภัย",
-        "impact_th": "ผู้โจมตีสร้าง symlink ใน /etc/cron.d ชี้ไปยัง script ที่ตัวเองควบคุม → cron อ่านและรัน script นั้นในฐานะ root ตามตารางเวลา → ได้ root shell แบบ persistent",
+        "description_th": " /etc/cron.d symlink cron daemon follow symlink execute root ",
+        "impact_th": " symlink /etc/cron.d script → cron script root → root shell persistent",
         "check": "symlink_check",
         "remediation": "chmod 755 /etc/cron.d && audit symlinks: find /etc/cron.d -type l",
         "prevention_th": [
-            "ตรวจสอบ symlink ใน cron.d: find /etc/cron.d -type l -ls",
-            "ลบ symlink ที่ไม่รู้จัก: find /etc/cron.d -type l -delete",
-            "แก้ permission: chmod 755 /etc/cron.d && chown root:root /etc/cron.d",
-            "อัปเกรด cronie/cron: apt upgrade cron",
-            "Monitor การเปลี่ยนแปลงใน cron.d: auditctl -w /etc/cron.d -p wa -k crond_change",
+            " symlink cron.d: find /etc/cron.d -type l -ls",
+            " symlink : find /etc/cron.d -type l -delete",
+            " permission: chmod 755 /etc/cron.d && chown root:root /etc/cron.d",
+            " cronie/cron: apt upgrade cron",
+            "Monitor cron.d: auditctl -w /etc/cron.d -p wa -k crond_change",
         ],
     },
     {
@@ -246,16 +215,16 @@ CVE_DB = [
         "cvss": 8.8,
         "category": "sudo",
         "description": "Cron jobs using sudo with runas ALL are vulnerable to sudo -u#-1 bypass, allowing privilege escalation to root.",
-        "description_th": "Cron job ที่ใช้ sudo กับ runas ALL มีความเสี่ยง เนื่องจาก sudo เวอร์ชันเก่าอนุญาตให้ใช้ -u#-1 ซึ่ง resolve เป็น UID 0 (root) แม้จะถูกห้าม",
-        "impact_th": "Cron script ที่มี 'sudo -u ... command' สามารถถูก exploit ด้วย 'sudo -u#-1 /bin/bash' → ได้ root shell แม้ sudoers จะห้ามรันในฐานะ root โดยตรง",
+        "description_th": "Cron job sudo runas ALL sudo -u#-1 resolve UID 0 (root) ",
+        "impact_th": "Cron script 'sudo -u ... command' exploit 'sudo -u#-1 /bin/bash' → root shell sudoers root ",
         "check": "crontab_sudo_all",
         "remediation": "Upgrade sudo >= 1.8.28. Audit crontabs for sudo ALL entries.",
         "prevention_th": [
-            "อัปเกรด sudo เป็นเวอร์ชัน 1.8.28 ขึ้นไป: apt upgrade sudo",
-            "ตรวจสอบ cron job ที่ใช้ sudo: grep -r 'sudo' /etc/cron* /var/spool/cron/",
-            "แทนที่ sudo ALL ด้วยการระบุ user/command ที่ชัดเจนใน sudoers",
-            "ใช้ 'Defaults!command noexec' เพื่อป้องกัน command injection",
-            "Audit sudoers เป็นประจำ: visudo -c && sudo -l",
+            " sudo 1.8.28 : apt upgrade sudo",
+            " cron job sudo: grep -r 'sudo' /etc/cron* /var/spool/cron/",
+            " sudo ALL user/command sudoers",
+            " 'Defaults!command noexec' command injection",
+            "Audit sudoers : visudo -c && sudo -l",
         ],
     },
     {
@@ -266,15 +235,15 @@ CVE_DB = [
         "cvss": 5.5,
         "category": "Information Disclosure",
         "description": "Cronie follows symlinks when reading crontab files, allowing local users to read arbitrary files as the cron daemon.",
-        "description_th": "cronie ตาม symlink ขณะอ่าน crontab file ทำให้ผู้ใช้ทั่วไปสร้าง symlink ใน /var/spool/cron ชี้ไปยังไฟล์ sensitive แล้ว cron daemon จะอ่านไฟล์นั้น",
-        "impact_th": "ผู้โจมตีสร้าง symlink /var/spool/cron/username → /etc/shadow → cron daemon อ่าน /etc/shadow และ log ข้อมูลหรือ error messages ที่มี content ของ /etc/shadow",
+        "description_th": "cronie symlink crontab file symlink /var/spool/cron sensitive cron daemon ",
+        "impact_th": " symlink /var/spool/cron/username → /etc/shadow → cron daemon /etc/shadow log error messages content /etc/shadow",
         "check": "symlink_check",
         "remediation": "Upgrade cronie >= 1.5.5. Audit /var/spool/cron for symlinks.",
         "prevention_th": [
-            "อัปเกรด cronie เป็นเวอร์ชัน 1.5.5 ขึ้นไป",
-            "ตรวจสอบ symlink ใน spool: find /var/spool/cron -type l -ls",
-            "แก้ permission: chmod 700 /var/spool/cron && chmod 600 /var/spool/cron/*",
-            "ลบ crontab ที่ไม่รู้จัก: crontab -r -u suspicious_user",
+            " cronie 1.5.5 ",
+            " symlink spool: find /var/spool/cron -type l -ls",
+            " permission: chmod 700 /var/spool/cron && chmod 600 /var/spool/cron/*",
+            " crontab : crontab -r -u suspicious_user",
         ],
     },
     {
@@ -285,16 +254,16 @@ CVE_DB = [
         "cvss": 6.5,
         "category": "Filesystem",
         "description": "Cron scripts running as root that use overlayfs paths are vulnerable to container escape / privilege escalation.",
-        "description_th": "Cron script ที่รันเป็น root และเขียนได้โดยทุกคน เปิดช่องให้ผู้โจมตีแก้ไข script เพื่อ inject command หรือใช้ overlayfs เพื่อ escape จาก container",
-        "impact_th": "ผู้โจมตีแก้ไข world-writable cron script ใส่ reverse shell หรือ command ที่เป็นอันตราย → เมื่อ cron รัน script นั้นตามตาราง → ได้ root shell แบบ scheduled",
+        "description_th": "Cron script root script inject command overlayfs escape container",
+        "impact_th": " world-writable cron script reverse shell command → cron script → root shell scheduled",
         "check": "cron_script_writable",
         "remediation": "Audit /etc/cron.* scripts for writable files. chmod 755 /etc/cron.d",
         "prevention_th": [
-            "ตรวจสอบ world-writable script: find /etc/cron* -perm -002 -type f -ls",
-            "แก้ permission script ทั้งหมด: chmod 755 /etc/cron.d/* && chown root:root /etc/cron.d/*",
-            "ตรวจสอบ content ของ cron script ว่ามีการแก้ไขผิดปกติ: md5sum /etc/cron.d/*",
-            "ใช้ AIDE หรือ Tripwire monitor การเปลี่ยนแปลง cron script",
-            "อัปเกรด kernel เพื่อ patch overlayfs: apt upgrade linux-image-$(uname -r)",
+            " world-writable script: find /etc/cron* -perm -002 -type f -ls",
+            " permission script : chmod 755 /etc/cron.d/* && chown root:root /etc/cron.d/*",
+            " content cron script : md5sum /etc/cron.d/*",
+            " AIDE Tripwire monitor cron script",
+            " kernel patch overlayfs: apt upgrade linux-image-$(uname -r)",
         ],
     },
 ]
@@ -628,16 +597,7 @@ def setup_lab_environment():
 # Pretty Output
 # ==============================
 def print_banner():
-    print(f"""
-{c(Color.CYAN + Color.BOLD, '''
- ██████╗ ██████╗ ███████╗██╗   ██╗██╗███╗   ██╗████████╗███████╗
-██╔════╝██╔═══██╗██╔════╝██║   ██║██║████╗  ██║╚══██╔══╝██╔════╝
-██║     ██║   ██║███████╗██║   ██║██║██╔██╗ ██║   ██║   █████╗
-██║     ██║   ██║╚════██║╚██╗ ██╔╝██║██║╚██╗██║   ██║   ██╔══╝
-╚██████╗╚██████╔╝███████║ ╚████╔╝ ██║██║ ╚████║   ██║   ███████╗
- ╚═════╝ ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝''')}
-{c(Color.GRAY, '         Cron CVE Scanner  |  "Conquer Vulnerabilities"')}
-""")
+    _print_banner('Cron CVE Scanner  |  "Conquer Vulnerabilities"')
 
 def print_sysinfo(cron_type, cron_version, mode_label, base_path):
     print(c(Color.CYAN + Color.BOLD, "  ╔══ SCAN INFORMATION ═══════════════════════════════════════╗"))
@@ -691,9 +651,9 @@ def print_findings(findings):
         print(f"     {c(Color.GRAY,'Description :')} {f['description'][:85]}{'...' if len(f['description'])>85 else ''}")
         # Thai vulnerability explanation
         if f.get("description_th"):
-            print(f"     {c(Color.CYAN,'📋 ช่องโหว่  :')} {c(Color.WHITE, f['description_th'][:90])}{'...' if len(f['description_th'])>90 else ''}")
+            print(f" {c(Color.CYAN,'📋 :')} {c(Color.WHITE, f['description_th'][:90])}{'...' if len(f['description_th'])>90 else ''}")
         if f.get("impact_th"):
-            print(f"     {c(Color.ORANGE,'⚡ ผลกระทบ  :')} {c(Color.YELLOW, f['impact_th'][:90])}{'...' if len(f['impact_th'])>90 else ''}")
+            print(f" {c(Color.ORANGE,'⚡ :')} {c(Color.YELLOW, f['impact_th'][:90])}{'...' if len(f['impact_th'])>90 else ''}")
         # Evidence
         detail = f.get("detail", {})
         if detail.get("path"):
@@ -706,7 +666,7 @@ def print_findings(findings):
                 print(f"     {c(Color.ORANGE,'→ Evidence  :')} {c(Color.YELLOW, str(line)[:70])}")
         # Thai prevention tips
         if f.get("prevention_th"):
-            print(f"     {c(Color.GREEN + Color.BOLD,'🛡  การป้องกัน:')}")
+            print(f" {c(Color.GREEN + Color.BOLD,'🛡 :')}")
             for i, tip in enumerate(f["prevention_th"], 1):
                 print(f"       {c(Color.GREEN, f'  {i}.')} {c(Color.GRAY, tip[:85])}{'...' if len(tip)>85 else ''}")
         else:
@@ -752,26 +712,13 @@ def get_distro():
 # Save Report
 # ==============================
 def save_report(cron_type, cron_version, findings, checks, base_path):
-    def sev(score):
-        if score >= 9: return "CRITICAL"
-        if score >= 7: return "HIGH"
-        if score >= 4: return "MEDIUM"
-        return "NONE"
-
+    from cosvinte_utils import system_info, score_to_severity
     max_cvss = max((f["cvss"] for f in findings), default=0)
-
     report = {
         "tool":      "COSVINTE — Cron CVE Scanner",
         "timestamp": datetime.now().isoformat(),
-        "system": {
-            "hostname": platform.node(),
-            "distro":   get_distro(),
-        },
-        "scan": {
-            "cron_type":    cron_type,
-            "cron_version": cron_version,
-            "base_path":    base_path,
-        },
+        "system":    system_info(),
+        "scan":      {"cron_type": cron_type, "cron_version": cron_version, "base_path": base_path},
         "checks": {
             k: {"vulnerable": bool(v), "detail": str(d) if d else None}
             for k, (v, d) in checks.items()
@@ -780,18 +727,11 @@ def save_report(cron_type, cron_version, findings, checks, base_path):
             "total_cve_db":     len(CVE_DB),
             "total_findings":   len(findings),
             "overall_cvss":     max_cvss,
-            "overall_severity": sev(max_cvss),
+            "overall_severity": score_to_severity(max_cvss),
         },
-        "findings": [
-            {k: v for k, v in f.items() if k != "detail"}
-            for f in findings
-        ],
+        "findings": [{k: v for k, v in f.items() if k != "detail"} for f in findings],
     }
-
-    fname = f"cosvinte_cron_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    with open(fname, "w", encoding="utf-8") as f:
-        json.dump(report, f, indent=4, ensure_ascii=False)
-    return fname
+    return save_json(report, "cosvinte_cron")
 
 # ==============================
 # MAIN
