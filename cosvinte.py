@@ -31,9 +31,9 @@ import importlib.util
 import argparse
 from datetime import datetime
 
-from cosvinte_utils import (
+from core.utils import (
     Color as _C, c as cc, system_info as _system_info,
-    save_json as _save_json, score_to_severity as _sev_from_score,
+    score_to_severity as _sev_from_score,
     separator as _separator_fn,
 )
 
@@ -55,8 +55,8 @@ BG_RED = _C.BG_RED
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 def _load(filename, alias):
-    """Dynamically load a scanner module by filename."""
-    path = os.path.join(_HERE, filename)
+    """Dynamically load a scanner module by filename or absolute path."""
+    path = filename if os.path.isabs(filename) else os.path.join(_HERE, filename)
     if not os.path.exists(path):
         return None
     spec = importlib.util.spec_from_file_location(alias, path)
@@ -79,9 +79,12 @@ BANNER = f"""
 # PDF generator import
 # ─────────────────────────────────────────────────────
 def _load_pdf():
+    # Try sibling cosvinte_pdf_report.py first, then core/pdf_report.py
     mod = _load("cosvinte_pdf_report.py", "cosvinte_pdf")
     if mod is None:
-        print(cc(YE, "  ⚠  cosvinte_pdf_report.py not found — PDF generation disabled."))
+        mod = _load(os.path.join(_HERE, "core", "pdf_report.py"), "cosvinte_pdf")
+    if mod is None:
+        print(cc(YE, "  ⚠  PDF report module not found — PDF generation disabled."))
     return mod
 
 # ─────────────────────────────────────────────────────
@@ -89,17 +92,25 @@ def _load_pdf():
 def _load_attack_chain():
     mod = _load("attack_chain.py", "attack_chain")
     if mod is None:
+        mod = _load(os.path.join(_HERE, "core", "attack_chain.py"), "attack_chain")
+    if mod is None:
         print(cc(YE, "  Attack Chain analysis disabled."))
     return mod
 
 def _load_risk_scoring():
     mod = _load("risk_scoring.py", "risk_scoring")
     if mod is None:
+        mod = _load(os.path.join(_HERE, "core", "risk_scoring.py"), "risk_scoring")
+    if mod is None:
         print(cc(YE, "  Context-Aware Scoring disabled."))
     return mod
 
 def _load_remediation():
     mod = _load("remediation.py", "remediation")
+    if mod is None:
+        mod = _load("scanners_remediation.py", "remediation")
+    if mod is None:
+        mod = _load(os.path.join(_HERE, "scanners", "remediation.py"), "remediation")
     if mod is None:
         print(cc(YE, "  Remediation Roadmap disabled."))
     return mod
@@ -109,8 +120,10 @@ def _load_remediation():
 # ─────────────────────────────────────────────────────
 
 def _generate_pdf(pdf_mod, report, prefix):
-    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = f"{prefix}_{ts}.pdf"
+    ts          = datetime.now().strftime("%Y%m%d_%H%M%S")
+    reports_dir = os.path.join(_HERE, "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+    path = os.path.join(reports_dir, f"{prefix}_{ts}.pdf")
     try:
         out = pdf_mod.generate_pdf(report, path)
         print(cc(GR, f"  ✔  PDF report → {cc(WH+B, out)}"))
@@ -125,7 +138,7 @@ def _generate_pdf(pdf_mod, report, prefix):
 # ══════════════════════════════════════════════════════
 # ─────────────────────────────────────────────────────
 def run_capabilities(pdf_mod=None):
-    caps = _load("Capabilities_cve.py", "caps")
+    caps = _load("Capabilities_cve.py", "caps") or _load("scanners_Capabilities_cve.py", "caps") or _load(os.path.join(_HERE, "scanners", "Capabilities_cve.py"), "caps")
     if caps is None:
         print(cc(RE, "  ✖  Capabilities_cve.py not found.")); return None
 
@@ -175,8 +188,6 @@ def run_capabilities(pdf_mod=None):
         "findings": findings,
     }
 
-    json_path = _save_json(report, "cosvinte_caps")
-    print(cc(GY, f"  JSON saved → {cc(WH+B, json_path)}"))
 
     if pdf_mod:
         _generate_pdf(pdf_mod, report, "cosvinte_caps")
@@ -190,7 +201,7 @@ def run_capabilities(pdf_mod=None):
 # ══════════════════════════════════════════════════════
 # ─────────────────────────────────────────────────────
 def run_cron(pdf_mod=None):
-    cron = _load("cron_cve.py", "cron")
+    cron = _load("cron_cve.py", "cron") or _load("scanners_cron_cve.py", "cron") or _load(os.path.join(_HERE, "scanners", "cron_cve.py"), "cron")
     if cron is None:
         print(cc(RE, "  ✖  cron_cve.py not found.")); return None
 
@@ -263,8 +274,6 @@ def run_cron(pdf_mod=None):
         "findings": [{k: v for k, v in f.items() if k != "detail"} for f in findings],
     }
 
-    json_path = _save_json(report, "cosvinte_cron")
-    print(cc(GY, f"  JSON saved → {cc(WH+B, json_path)}"))
 
     if pdf_mod:
         _generate_pdf(pdf_mod, report, "cosvinte_cron")
@@ -278,7 +287,7 @@ def run_cron(pdf_mod=None):
 # ══════════════════════════════════════════════════════
 # ─────────────────────────────────────────────────────
 def run_kernel(pdf_mod=None):
-    kern = _load("kernel_cve.py", "kernel")
+    kern = _load("kernel_cve.py", "kernel") or _load("scanners_kernel_cve.py", "kernel") or _load(os.path.join(_HERE, "scanners", "kernel_cve.py"), "kernel")
     if kern is None:
         print(cc(RE, "  ✖  kernel_cve.py not found.")); return None
 
@@ -322,8 +331,6 @@ def run_kernel(pdf_mod=None):
         "findings": findings,
     }
 
-    json_path = _save_json(report, "cosvinte_kernel")
-    print(cc(GY, f"  JSON saved → {cc(WH+B, json_path)}"))
 
     if pdf_mod:
         _generate_pdf(pdf_mod, report, "cosvinte_kernel")
@@ -337,7 +344,7 @@ def run_kernel(pdf_mod=None):
 # ══════════════════════════════════════════════════════
 # ─────────────────────────────────────────────────────
 def run_path(pdf_mod=None):
-    path = _load("PATH_hijack.py", "path_hijack")
+    path = _load("PATH_hijack.py", "path_hijack") or _load("scanners_PATH_hijack.py", "path_hijack") or _load(os.path.join(_HERE, "scanners", "PATH_hijack.py"), "path_hijack")
     if path is None:
         print(cc(RE, "  ✖  PATH_hijack.py not found.")); return None
 
@@ -397,8 +404,6 @@ def run_path(pdf_mod=None):
         ],
     }
 
-    json_path = _save_json(report, "cosvinte_path")
-    print(cc(GY, f"  JSON saved → {cc(WH+B, json_path)}"))
 
     if pdf_mod:
         _generate_pdf(pdf_mod, report, "cosvinte_path")
@@ -412,7 +417,7 @@ def run_path(pdf_mod=None):
 # ══════════════════════════════════════════════════════
 # ─────────────────────────────────────────────────────
 def run_writable(pdf_mod=None):
-    wp = _load("Writable_paths_cve.py", "writable")
+    wp = _load("Writable_paths_cve.py", "writable") or _load("scanners_Writable_paths_cve.py", "writable") or _load(os.path.join(_HERE, "scanners", "Writable_paths_cve.py"), "writable")
     if wp is None:
         print(cc(RE, "  ✖  Writable_paths_cve.py not found.")); return None
 
@@ -450,8 +455,6 @@ def run_writable(pdf_mod=None):
         ],
     }
 
-    json_path = _save_json(report, "cosvinte_writable")
-    print(cc(GY, f"  JSON saved → {cc(WH+B, json_path)}"))
 
     if pdf_mod:
         _generate_pdf(pdf_mod, report, "cosvinte_writable")
@@ -603,8 +606,6 @@ def run_all_plus(pdf_mod=None):
         }
 
     # Save JSON
-    json_path = _save_json(combined, "cosvinte_full")
-    print(cc(GY, f"  JSON saved → {cc(WH+B, json_path)}"))
 
     # Generate combined PDF
     if pdf_mod and any(reports_list):
@@ -770,7 +771,10 @@ Examples:
         print(cc(CY+B, "\n  ▸  Generating combined PDF report …"))
         combined = _combined_report(reports)
         ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out  = pdf_mod.generate_pdf(combined, f"cosvinte_combined_{ts}.pdf")
+        reports_dir = os.path.join(_HERE, "reports")
+        os.makedirs(reports_dir, exist_ok=True)
+        pdf_path = os.path.join(reports_dir, f"cosvinte_combined_{ts}.pdf")
+        out  = pdf_mod.generate_pdf(combined, pdf_path)
         print(cc(GR, f"  ✔  Combined PDF → {cc(WH+B, out)}\n"))
 
     _separator()

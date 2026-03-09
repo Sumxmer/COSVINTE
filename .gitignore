@@ -1,7 +1,0 @@
-# Python virtual environment
-.venv/
-venv/
-
-# Other common files to ignore
-.env
-
