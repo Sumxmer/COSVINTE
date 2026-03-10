@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
   COSVINTE — PDF Report Generator
-  สร้าง PDF report แบบ professional จาก scan results ทั้งหมด
-  รองรับ: Capabilities, Cron, Kernel, PATH Hijack, Writable Paths,
+  Generates a professional PDF report from combined scan results.
+  Covers: Capabilities, Cron, Kernel, PATH Hijack, Writable Paths,
           Attack Chains, Context-Aware Risk Scoring, Remediation Roadmap
 """
 
@@ -41,6 +41,7 @@ C_WHITE     = colors.HexColor("#e6edf3")
 C_GRAY      = colors.HexColor("#8b949e")
 C_DARK_GRAY = colors.HexColor("#21262d")
 C_ACCENT    = colors.HexColor("#7c3aed")
+C_CHAIN_HDR = colors.HexColor("#1f2937")
 
 SEV_COLORS = {
     "CRITICAL": C_CRITICAL,
@@ -61,7 +62,7 @@ MARGIN = 1.8 * cm
 # Custom Flowables
 # ──────────────────────────────────────────────
 class ColorBar(Flowable):
-    """Horizontal color bar สำหรับ severity indicators"""
+    """Horizontal color bar for severity indicators."""
     def __init__(self, width, height, color, label="", label_color=colors.white):
         super().__init__()
         self.bar_w   = width
@@ -212,6 +213,8 @@ def _build_styles():
     ps("step_num",    fontName="Helvetica-Bold",   fontSize=8,  textColor=C_CYAN)
     ps("toc_item",    fontName="Helvetica",        fontSize=9,  textColor=C_WHITE,    leading=16)
     ps("toc_page",    fontName="Helvetica",        fontSize=9,  textColor=C_GRAY,     leading=16)
+    ps("chain_name",  fontName="Helvetica-Bold",   fontSize=10, textColor=C_WHITE,    spaceAfter=2)
+    ps("chain_sub",   fontName="Helvetica",        fontSize=8,  textColor=C_CYAN,     spaceAfter=3)
     ps("evidence",    fontName="Courier",          fontSize=7,  textColor=C_MEDIUM,   leading=10)
     ps("rem_title",   fontName="Helvetica-Bold",   fontSize=9,  textColor=C_WHITE,    spaceBefore=4, spaceAfter=2)
     ps("cmd",         fontName="Courier",          fontSize=7,  textColor=C_LOW,      leading=10,    backColor=C_DARK_GRAY, leftIndent=8, rightIndent=4)
@@ -271,7 +274,7 @@ def _finding_card(finding: dict, scanner: str, S: dict, idx: int) -> list:
     score = float(score)
     name  = (finding.get("cve") or finding.get("name") or
              finding.get("binary") or finding.get("path") or f"Finding #{idx}")
-    desc  = (finding.get("description") or finding.get("description_th") or "")[:200]
+    desc  = (finding.get("description") or finding.get("description_en") or finding.get("description_th") or "")[:200]
 
     # Card header row
     sev_col   = _sev_color(sev)
@@ -314,10 +317,10 @@ def _finding_card(finding: dict, scanner: str, S: dict, idx: int) -> list:
         body_rows.append(["Description", desc])
 
     # Thai description/impact
-    if finding.get("description_th"):
-        body_rows.append(["ช่องโหว่", str(finding["description_th"])[:200]])
-    if finding.get("impact_th"):
-        body_rows.append(["ผลกระทบ", str(finding["impact_th"])[:200]])
+    if finding.get("description_en") or finding.get("description_th"):
+        body_rows.append(["Detail", str(finding.get("description_en") or finding.get("description_th", ""))[:200]])
+    if finding.get("impact") or finding.get("impact_th"):
+        body_rows.append(["Impact", str(finding.get("impact") or finding.get("impact_th", ""))[:200]])
 
     if finding.get("exploit_hint"):
         body_rows.append(["Exploit", str(finding["exploit_hint"])[:120]])
@@ -334,10 +337,10 @@ def _finding_card(finding: dict, scanner: str, S: dict, idx: int) -> list:
         story.append(t)
 
     # Prevention tips Thai
-    prev = finding.get("prevention_th", [])
+    prev = finding.get("prevention") or finding.get("prevention_th") or []
     if prev:
         story.append(_sp(1))
-        story.append(Paragraph("🛡  การป้องกัน", S["h2"]))
+        story.append(Paragraph("Prevention Steps", S["h2"]))
         for i, tip in enumerate(prev[:4], 1):
             story.append(Paragraph(f"{i}. {tip}", S["step"]))
 
@@ -423,100 +426,91 @@ def _build_cover(report: dict, S: dict) -> list:
     return story
 
 
-def _count_findings_by_severity(report: dict) -> dict:
-    """Count findings across all scanner sub-reports by status and severity."""
-    counts = {"total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0,
-              "vulnerable": 0, "unknown": 0, "patched": 0}
-    all_findings = []
-    for key in ("findings", "writable_paths", "path_analysis", "cve_correlations"):
-        all_findings.extend(report.get(key, []))
-    for skey in ("caps", "cron", "kernel", "path", "writable"):
-        sub = report.get(skey, {})
-        if isinstance(sub, dict):
-            for key in ("findings", "writable_paths", "path_analysis"):
-                all_findings.extend(sub.get(key, []))
-    seen = set()
-    for f in all_findings:
-        fid = f.get("cve") or f.get("name") or id(f)
-        if fid in seen:
-            continue
-        seen.add(fid)
-        counts["total"] += 1
-        sev    = str(f.get("severity", "")).upper()
-        status = str(f.get("status",   "")).upper()
-        if sev == "CRITICAL":  counts["critical"] += 1
-        elif sev == "HIGH":    counts["high"]     += 1
-        elif sev == "MEDIUM":  counts["medium"]   += 1
-        elif sev == "LOW":     counts["low"]      += 1
-        if status == "VULNERABLE":  counts["vulnerable"] += 1
-        elif status == "UNKNOWN":   counts["unknown"]    += 1
-        elif status == "PATCHED":   counts["patched"]    += 1
-    return counts
-
-
-def _build_executive_summary(report: dict, S: dict) -> list:
+def _build_executive_summary(report: dict, chains: list, S: dict) -> list:
     story = []
     story.append(SectionDivider("EXECUTIVE SUMMARY", C_CYAN))
     story.append(_sp(2))
 
-    cnts    = _count_findings_by_severity(report)
     summary = report.get("summary", {})
 
+    # Stats grid
     stats = [
-        ("Total Findings",  str(cnts["total"] or summary.get("total_findings", 0) or "-")),
-        ("Vulnerable",      str(cnts["vulnerable"])),
-        ("Unknown",         str(cnts["unknown"])),
-        ("Patched",         str(cnts["patched"])),
+        ("Total Findings",  str(summary.get("total_findings", 0) or
+                                summary.get("total_matches", 0) or
+                                summary.get("total_cve_db", 0) or "-")),
+        ("Critical",        str(summary.get("critical", 0) or
+                                summary.get("vulnerable", 0) or "0")),
+        ("High",            str(summary.get("high", 0) or "0")),
+        ("Medium",          str(summary.get("medium", 0) or "0")),
+        ("Attack Chains",   str(len(chains))),
         ("Immediate Fixes", str(sum(1 for a in report.get("remediation_roadmap", [])
                                    if a.get("timeline") == "immediate"))),
     ]
-    sev_stats = [
-        ("Critical", str(cnts["critical"]), C_CRITICAL),
-        ("High",     str(cnts["high"]),     C_HIGH),
-        ("Medium",   str(cnts["medium"]),   C_MEDIUM),
-        ("Low",      str(cnts["low"]),      C_LOW),
-    ]
 
-    def _stat_cell(val, label, color=C_CYAN):
-        return Table(
+    stat_data = []
+    row = []
+    for i, (label, val) in enumerate(stats):
+        cell = Table(
             [[Paragraph(val,   ParagraphStyle("sv", fontName="Helvetica-Bold", fontSize=22,
-                                               textColor=color, alignment=TA_CENTER))],
+                                               textColor=C_CYAN, alignment=TA_CENTER))],
              [Paragraph(label, ParagraphStyle("sl", fontName="Helvetica", fontSize=7,
                                                textColor=C_GRAY, alignment=TA_CENTER))]],
             style=TableStyle([
-                ("BACKGROUND",    (0,0),(-1,-1), C_SURFACE),
-                ("TOPPADDING",    (0,0),(-1,-1), 8),
-                ("BOTTOMPADDING", (0,0),(-1,-1), 8),
-                ("LINEABOVE",     (0,0),(-1, 0), 2, color),
+                ("BACKGROUND",  (0, 0), (-1, -1), C_SURFACE),
+                ("TOPPADDING",  (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING",(0,0), (-1, -1), 8),
+                ("LINEABOVE",   (0, 0), (-1, 0),  2, C_CYAN),
             ]))
-
-    col_w = (PAGE_W - MARGIN * 2) / 3
-
-    # Row 1 — status counts (pad to multiple of 3)
-    stat_data, row = [], []
-    for label, val in stats:
-        row.append(_stat_cell(val, label))
+        row.append(cell)
         if len(row) == 3:
-            stat_data.append(row); row = []
+            stat_data.append(row)
+            row = []
     if row:
-        while len(row) < 3: row.append(Spacer(1, 1))
+        while len(row) < 3:
+            row.append(Spacer(1, 1))
         stat_data.append(row)
 
-    story.append(Table(stat_data, colWidths=[col_w]*3,
-                       style=TableStyle([("LEFTPADDING",  (0,0),(-1,-1), 4),
-                                         ("RIGHTPADDING", (0,0),(-1,-1), 4),
-                                         ("TOPPADDING",   (0,0),(-1,-1), 4),
-                                         ("BOTTOMPADDING",(0,0),(-1,-1), 4)])))
-    story.append(_sp(2))
-
-    # Row 2 — severity breakdown
-    sev_row = [_stat_cell(v, l, col) for l, v, col in sev_stats]
-    story.append(Table([sev_row], colWidths=[(PAGE_W - MARGIN*2)/4]*4,
-                       style=TableStyle([("LEFTPADDING",  (0,0),(-1,-1), 4),
-                                         ("RIGHTPADDING", (0,0),(-1,-1), 4),
-                                         ("TOPPADDING",   (0,0),(-1,-1), 4),
-                                         ("BOTTOMPADDING",(0,0),(-1,-1), 4)])))
+    col_w = (PAGE_W - MARGIN * 2) / 3
+    stats_table = Table(stat_data, colWidths=[col_w]*3,
+                        style=TableStyle([
+                            ("LEFTPADDING",  (0, 0), (-1, -1), 4),
+                            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                            ("TOPPADDING",   (0, 0), (-1, -1), 4),
+                            ("BOTTOMPADDING",(0, 0), (-1, -1), 4),
+                        ]))
+    story.append(stats_table)
     story.append(_sp(3))
+
+    # Attack chains quick list
+    if chains:
+        story.append(Paragraph("Attack Chains Detected", S["h1"]))
+        chain_rows = [
+            [Paragraph("ID", S["label"]), Paragraph("Chain", S["label"]),
+             Paragraph("Severity", S["label"]), Paragraph("Confidence", S["label"])]
+        ]
+        for ch in chains[:8]:
+            chain_rows.append([
+                Paragraph(str(ch.get("id", "-")), S["body"]),
+                Paragraph(_safe(str(ch.get("name", "-"))[:55]), S["body"]),
+                Paragraph(f' {ch.get("severity","?")} ', _badge_style(ch.get("severity","?"), S)),
+                Paragraph(f'{ch.get("confidence","?")}%', S["body"]),
+            ])
+        cw = PAGE_W - MARGIN * 2
+        chain_tbl = Table(chain_rows, colWidths=[2.2*cm, cw-2.2*cm-2.5*cm-2.5*cm, 2.5*cm, 2.5*cm],
+                          style=TableStyle([
+                              ("BACKGROUND",  (0, 0), (-1, 0),  C_DARK_GRAY),
+                              ("BACKGROUND",  (0, 1), (-1, -1), C_SURFACE),
+                              ("ROWBACKGROUNDS", (0, 1), (-1, -1), [C_SURFACE, C_DARK_GRAY]),
+                              ("TEXTCOLOR",   (0, 0), (-1, 0),  C_GRAY),
+                              ("FONTNAME",    (0, 0), (-1, 0),  "Helvetica-Bold"),
+                              ("FONTSIZE",    (0, 0), (-1, -1), 8),
+                              ("TOPPADDING",  (0, 0), (-1, -1), 5),
+                              ("BOTTOMPADDING",(0,0), (-1, -1), 5),
+                              ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                              ("LINEBELOW",   (0, 0), (-1, 0),  0.5, C_BORDER),
+                          ]))
+        story.append(chain_tbl)
+
     story.append(PageBreak())
     return story
 
@@ -614,15 +608,137 @@ def _build_scanner_section(scanner_key: str, report: dict, S: dict) -> list:
     return story
 
 
+def _build_attack_chains(chains: list, S: dict) -> list:
+    if not chains:
+        return []
+
+    story = []
+    story.append(SectionDivider("ATTACK CHAIN ANALYSIS", C_CRITICAL))
+    story.append(_sp(1))
+    story.append(Paragraph(
+        "Each chain below represents a realistic multi-step privilege escalation path assembled "
+        "from findings across all scanners. Each chain has a confidence score and step-by-step walkthrough.",
+        S["body_gray"]
+    ))
+    story.append(_sp(2))
+
+    for idx, chain in enumerate(chains, 1):
+        sev      = chain.get("severity", "HIGH")
+        conf     = chain.get("confidence", 0)
+        sev_col  = _sev_color(sev)
+
+        # Chain header
+        hdr_data = [[
+            Paragraph(f'{chain.get("id","?")}', S["label"]),
+            Paragraph(f'{chain.get("name","?")}', S["chain_name"]),
+            Paragraph(f' {sev} ', _badge_style(sev, S)),
+            Paragraph(f'Confidence: {conf}%', S["body_gray"]),
+        ]]
+        cw = PAGE_W - MARGIN * 2
+        hdr_t = Table(hdr_data, colWidths=[2*cm, cw-2*cm-2.5*cm-3*cm, 2.5*cm, 3*cm],
+                      style=TableStyle([
+                          ("BACKGROUND",  (0, 0), (-1, -1), C_CHAIN_HDR),
+                          ("LINEABOVE",   (0, 0), (-1, 0),  2, sev_col),
+                          ("TOPPADDING",  (0, 0), (-1, -1), 8),
+                          ("BOTTOMPADDING",(0,0), (-1, -1), 8),
+                          ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                          ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
+                      ]))
+
+        # Body
+        body_elements = [hdr_t]
+
+        if chain.get("name_en") or chain.get("name_th"):
+            body_elements.append(
+                Table([[Paragraph(_safe(chain.get("name_en") or chain.get("name_th", "")), S["chain_sub"])]],
+                      colWidths=[cw],
+                      style=TableStyle([
+                          ("BACKGROUND",  (0,0),(-1,-1), C_SURFACE),
+                          ("LEFTPADDING", (0,0),(-1,-1), 10),
+                          ("TOPPADDING",  (0,0),(-1,-1), 4),
+                          ("BOTTOMPADDING",(0,0),(-1,-1), 4),
+                      ]))
+            )
+
+        if chain.get("description") or chain.get("description_th"):
+            body_elements.append(
+                Table([[Paragraph(_safe(chain.get("description") or chain.get("description_th", "")), S["body_gray"])]],
+                      colWidths=[cw],
+                      style=TableStyle([
+                          ("BACKGROUND",  (0,0),(-1,-1), C_SURFACE),
+                          ("LEFTPADDING", (0,0),(-1,-1), 10),
+                          ("BOTTOMPADDING",(0,0),(-1,-1), 6),
+                      ]))
+            )
+
+        # MITRE + Sources
+        mitre_sources = f"MITRE: {chain.get('mitre','?')}   |   Sources: {', '.join(chain.get('sources_used',[]))}"
+        body_elements.append(
+            Table([[Paragraph(_safe(mitre_sources), S["body_gray"])]],
+                  colWidths=[cw],
+                  style=TableStyle([
+                      ("BACKGROUND", (0,0),(-1,-1), C_SURFACE),
+                      ("LEFTPADDING",(0,0),(-1,-1), 10),
+                      ("BOTTOMPADDING",(0,0),(-1,-1),4),
+                  ]))
+        )
+
+        # Steps
+        steps = chain.get("steps") or chain.get("steps_th") or []
+        if steps:
+            step_rows = [[Paragraph("Attack Steps", S["h2"])]]
+            for si, step in enumerate(steps, 1):
+                for li, line in enumerate(step.split("\n")):
+                    safe_line = line.strip().replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+                    if li == 0:
+                        step_rows.append([Paragraph(f"{si}. {safe_line}", S["step"])])
+                    else:
+                        step_rows.append([Paragraph(safe_line, S["cmd"])])
+
+            steps_t = Table(step_rows, colWidths=[cw],
+                            style=TableStyle([
+                                ("BACKGROUND",  (0,0),(-1,-1), C_SURFACE),
+                                ("LEFTPADDING", (0,0),(-1,-1), 12),
+                                ("TOPPADDING",  (0,0),(-1,-1), 1),
+                                ("BOTTOMPADDING",(0,0),(-1,-1),1),
+                                ("LINEBELOW",   (0,-1),(-1,-1), 0.5, C_BORDER),
+                            ]))
+            body_elements.append(steps_t)
+
+        # Evidence
+        ev_summary = chain.get("evidence_summary", {})
+        if ev_summary:
+            ev_rows = [[Paragraph("Evidence", S["h2"])]]
+            for src, items in ev_summary.items():
+                for item in items:
+                    ev_rows.append([Paragraph(f"[{src}] {item}", S["evidence"])])
+            ev_t = Table(ev_rows, colWidths=[cw],
+                         style=TableStyle([
+                             ("BACKGROUND",  (0,0),(-1,-1), C_DARK_GRAY),
+                             ("LEFTPADDING", (0,0),(-1,-1), 12),
+                             ("TOPPADDING",  (0,0),(-1,-1), 2),
+                             ("BOTTOMPADDING",(0,0),(-1,-1),2),
+                         ]))
+            body_elements.append(ev_t)
+
+        story.append(KeepTogether(body_elements[:4]))
+        for el in body_elements[4:]:
+            story.append(el)
+        story.append(_sp(3))
+
+    story.append(PageBreak())
+    return story
+
+
 def _build_remediation(actions: list, S: dict) -> list:
     if not actions:
         return []
 
     TIMELINE_LABELS = {
-        "immediate": ("ทำทันที (วันนี้)",    C_CRITICAL),
-        "week1":     ("ภายใน 1 สัปดาห์",    C_HIGH),
-        "week2":     ("ภายใน 2 สัปดาห์",    C_MEDIUM),
-        "month1":    ("ภายใน 1 เดือน",      C_LOW),
+        "immediate": ("Immediate  (Today)",    C_CRITICAL),
+        "week1":     ("Within 1 Week",    C_HIGH),
+        "week2":     ("Within 2 Weeks",    C_MEDIUM),
+        "month1":    ("Within 1 Month",      C_LOW),
     }
     EFFORT_COLS = {"LOW": C_LOW, "MEDIUM": C_MEDIUM, "HIGH": C_HIGH}
 
@@ -630,8 +746,8 @@ def _build_remediation(actions: list, S: dict) -> list:
     story.append(SectionDivider("REMEDIATION ROADMAP", C_LOW))
     story.append(_sp(1))
     story.append(Paragraph(
-        "แผนการแก้ไขเรียงตาม priority: timeline → impact → effort  "
-        "แต่ละ action มี command พร้อมรันและ verify step",
+        "Actions ordered by priority: timeline -> impact -> effort. "
+        "Each action includes ready-to-run commands and a verification step.",
         S["body_gray"]
     ))
     story.append(_sp(2))
@@ -655,6 +771,7 @@ def _build_remediation(actions: list, S: dict) -> list:
         for action in group:
             imp_col  = _sev_color(action.get("impact", "MEDIUM"))
             eff_col  = EFFORT_COLS.get(action.get("effort", "MEDIUM"), C_GRAY)
+            chains_broken = action.get("breaks_chains", [])
 
             # Action header
             hdr = [[
@@ -680,8 +797,15 @@ def _build_remediation(actions: list, S: dict) -> list:
 
             # Details
             details = []
-            if action.get("description_th"):
-                details.append(Paragraph(_safe(action["description_th"]), S["body_gray"]))
+            if action.get("description") or action.get("description_th"):
+                details.append(Paragraph(_safe(action.get("description") or action.get("description_th", "")), S["body_gray"]))
+
+            if chains_broken:
+                details.append(Paragraph(
+                    f"Breaks Attack Chains: {', '.join(chains_broken)}",
+                    ParagraphStyle("chain_ref", fontName="Helvetica-Bold", fontSize=7,
+                                   textColor=C_MEDIUM)
+                ))
 
             trigger = action.get("trigger_finding", "")
             if trigger:
@@ -744,7 +868,7 @@ def _build_context_factors(factors: dict, S: dict) -> list:
     story.append(SectionDivider("CONTEXT-AWARE RISK FACTORS", C_CYAN))
     story.append(_sp(1))
     story.append(Paragraph(
-        "ปัจจัย environment เหล่านี้ถูกนำมาปรับ CVSS base score ให้สะท้อนความเสี่ยงจริงของระบบนี้",
+        "These environmental factors adjust the CVSS base score to reflect the real-world risk of this system.",
         S["body_gray"]
     ))
     story.append(_sp(2))
@@ -758,7 +882,7 @@ def _build_context_factors(factors: dict, S: dict) -> list:
     for key, factor in factors.items():
         active = factor.get("active", False)
         weight = factor.get("weight", 0.0)
-        label  = factor.get("label_th", factor.get("label", key))
+        label  = factor.get("label") or factor.get("label_th") or key
         w_col  = C_CRITICAL if weight > 0.5 else (C_LOW if weight < 0 else C_GRAY)
         s_col  = C_CRITICAL if (active and weight > 0) else (C_LOW if not active else C_GRAY)
         status = "RISK" if (active and weight > 0) else ("SAFE" if not active else "MITIGATING")
@@ -792,8 +916,8 @@ def _build_context_factors(factors: dict, S: dict) -> list:
 # ──────────────────────────────────────────────
 def generate_pdf(report: dict, output_path: str) -> str:
     """
-    สร้าง PDF report จาก combined report dict
-    คืน path ของไฟล์ที่สร้าง
+    Build the full PDF from a combined report dict.
+    Returns the output file path.
     """
     S = _build_styles()
 
@@ -822,15 +946,20 @@ def generate_pdf(report: dict, output_path: str) -> str:
     story.extend(_build_cover(report, S))
 
     # ── Executive Summary ──
-    story.extend(_build_executive_summary(report, S))
+    chains = report.get("attack_chains", [])
+    story.extend(_build_executive_summary(report, chains, S))
 
     # ── Scanner Sections ──
-    # จาก combined report ดึงข้อมูลแต่ละ scanner
+    # Extract per-scanner data and build individual sections
     scanner_keys = ["caps", "cron", "kernel", "path", "writable"]
     for key in scanner_keys:
         scanner_report = _extract_scanner_data(report, key)
         if scanner_report:
             story.extend(_build_scanner_section(key, scanner_report, S))
+
+    # ── Attack Chains ──
+    if chains:
+        story.extend(_build_attack_chains(chains, S))
 
     # ── Context Factors ──
     context_factors = report.get("context_factors", {})
@@ -848,9 +977,15 @@ def generate_pdf(report: dict, output_path: str) -> str:
 
 def _extract_scanner_data(combined: dict, scanner_key: str) -> dict:
     """
-    พยายามดึงข้อมูลของ scanner จาก combined report
-    ทั้ง combined format และ single-scanner format
+    Extract per-scanner data from a combined report dict.
+    Prefers the 'scanner_reports' sub-dict written by _combined_report().
+    Falls back to keyword matching then category filtering.
     """
+    # Preferred path: combined report has tagged per-scanner sub-reports
+    scanner_reports = combined.get("scanner_reports", {})
+    if scanner_key in scanner_reports:
+        return scanner_reports[scanner_key]
+
     tool_map = {
         "caps":     "Capability",
         "cron":     "Cron",
@@ -860,25 +995,32 @@ def _extract_scanner_data(combined: dict, scanner_key: str) -> dict:
     }
     keyword = tool_map.get(scanner_key, "")
 
-    # ถ้า report มี tool field ตรงกับ scanner นี้ (single scanner mode)
+    # Single-scanner mode: the report itself belongs to this scanner
     if keyword and keyword.lower() in str(combined.get("tool", "")).lower():
         return combined
 
-    # สำหรับ combined report: สร้าง sub-report จาก findings ที่เกี่ยวข้อง
+    # Last-resort: filter flat findings list by category (combined mode without scanner_reports)
     findings = combined.get("findings", [])
     relevant = []
 
+    CAP_CATEGORIES = {"Linux Capabilities", "Capability"}
+    CRON_CATEGORIES = {"File Permission", "Permission", "Access Control", "Cron"}
+    KERNEL_CATEGORIES = {"Race Condition", "Pipe Buffer", "Heap Overflow",
+                         "Use-After-Free", "Memory Corruption", "Buffer Overflow",
+                         "SUID", "glibc"}
+
     if scanner_key == "caps":
-        relevant = [f for f in findings if "capability" in f or "cap_" in str(f.get("capability",""))]
+        relevant = [f for f in findings if
+                    f.get("category") in CAP_CATEGORIES or
+                    f.get("capability") or
+                    "cap_" in str(f.get("name", "")).lower()]
     elif scanner_key == "cron":
-        relevant = [f for f in findings if f.get("category") in
-                    ("File Permission", "Memory Corruption", "Buffer Overflow", "Permission", "Access Control")]
+        relevant = [f for f in findings if f.get("category") in CRON_CATEGORIES]
     elif scanner_key == "kernel":
-        relevant = [f for f in findings if f.get("category") in
-                    ("Race Condition", "Pipe Buffer", "Heap Overflow", "Use-After-Free")]
+        relevant = [f for f in findings if f.get("category") in KERNEL_CATEGORIES]
     elif scanner_key == "path":
-        relevant = combined.get("path_analysis", []) + \
-                   [f for f in combined.get("suid_binaries", []) if f]
+        relevant = (combined.get("path_analysis", []) +
+                    [f for f in combined.get("suid_binaries", []) if f])
     elif scanner_key == "writable":
         relevant = combined.get("writable_paths", [])
 
@@ -886,15 +1028,16 @@ def _extract_scanner_data(combined: dict, scanner_key: str) -> dict:
         return None
 
     return {
-        "tool":     f"COSVINTE — {scanner_key.title()} Scanner",
-        "system":   combined.get("system", {}),
-        "summary":  {},
-        "findings": relevant,
-        "writable_paths": combined.get("writable_paths", []) if scanner_key == "writable" else [],
-        "cve_correlations": combined.get("cve_correlations", []) if scanner_key == "writable" else [],
-        "checks":   combined.get("checks", {}) if scanner_key == "cron" else {},
-        "path_analysis": combined.get("path_analysis", []) if scanner_key == "path" else [],
+        "tool":              f"COSVINTE — {scanner_key.title()} Scanner",
+        "system":            combined.get("system", {}),
+        "summary":           {},
+        "findings":          relevant,
+        "writable_paths":    combined.get("writable_paths", []) if scanner_key == "writable" else [],
+        "cve_correlations":  combined.get("cve_correlations", []) if scanner_key == "writable" else [],
+        "checks":            combined.get("checks", {}) if scanner_key == "cron" else {},
+        "path_analysis":     combined.get("path_analysis", []) if scanner_key == "path" else [],
     }
+
 
 
 # ──────────────────────────────────────────────

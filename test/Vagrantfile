@@ -23,6 +23,7 @@ Vagrant.configure("2") do |config|
       chmod 777 /tmp
       apt-get install -y git python3 python3-pip
       pip3 install packaging requests
+      apt-get install -y python3-reportlab
       git clone -b test https://github.com/Sumxmer/COSVINTE/ /home/vagrant/COSVINTE
       chown -R vagrant:vagrant /home/vagrant/COSVINTE
 
@@ -42,7 +43,7 @@ Vagrant.configure("2") do |config|
     v.vm.provision "shell", inline: <<-SHELL
       echo "[*] Updating to latest patched kernel..."
       apt-get update -qq && apt-get upgrade -y
-      apt-get install -y git python3 python3-pip
+      apt-get install -y git python3 python3-pip python3-reportlab
       pip3 install packaging requests
       git clone -b test https://github.com/Sumxmer/COSVINTE/ /home/vagrant/COSVINTE
       chown -R vagrant:vagrant /home/vagrant/COSVINTE
