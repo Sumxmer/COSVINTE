@@ -30,6 +30,7 @@ CVE_DB = [
     # ── Dirty COW family ──
     {
         "cve": "CVE-2016-5195",
+        "ubuntu_patched_abi": 2,
         "name": "Dirty COW",
         "category": "Race Condition",
         "affected_min": "2.6.22",
@@ -55,6 +56,7 @@ CVE_DB = [
     },
     {
         "cve": "CVE-2022-0847",
+        "ubuntu_patched_abi": 11,
         "name": "Dirty Pipe",
         "category": "Pipe Buffer",
         "affected_min": "5.8",
@@ -81,6 +83,7 @@ CVE_DB = [
     # ── sudo / userspace ──
     {
         "cve": "CVE-2021-3156",
+        "ubuntu_patched_abi": 12,
         "name": "Baron Samedit",
         "category": "Heap Overflow",
         "affected_min": "0.0.1",
@@ -269,6 +272,7 @@ CVE_DB = [
     # ── Memory / UAF ──
     {
         "cve": "CVE-2021-22555",
+        "ubuntu_patched_abi": 18,
         "name": "Netfilter Heap Out-of-Bounds Write",
         "category": "Heap Overflow",
         "affected_min": "2.6.19",
@@ -295,6 +299,7 @@ CVE_DB = [
     },
     {
         "cve": "CVE-2022-27666",
+        "ubuntu_patched_abi": 20,
         "name": "ESP Transformation Heap Overflow",
         "category": "IPSec",
         "affected_min": "5.10",
@@ -322,6 +327,7 @@ CVE_DB = [
     # ── SUID / Capabilities ──
     {
         "cve": "CVE-2021-4034",
+        "ubuntu_patched_abi": 15,
         "name": "PwnKit (pkexec)",
         "category": "SUID",
         "affected_min": "0.0.1",
@@ -488,57 +494,131 @@ def get_arch():
 # ==============================
 # Backport Patch Detection
 # ==============================
-def check_backport_via_sysfs(cve_entry):
-    """
-    Try to detect if a patch has been backported by distros
-    using /proc/sys or changelog heuristics.
-    """
-    indicators = cve_entry.get("patch_indicator", [])
-    if not indicators:
-        return None  # Cannot determine
-
-    # Method 1: Check kernel config (some distros expose patch notes)
+def _is_wsl() -> bool:
+    """Detect if running inside WSL (Windows Subsystem for Linux)."""
     try:
-        result = subprocess.run(
-            ["grep", "-r"] + indicators[:1] + ["/proc/version"],
-            capture_output=True, text=True, timeout=2
+        with open("/proc/version") as fh:
+            return "microsoft" in fh.read().lower()
+    except Exception:
+        return False
+
+
+def _get_ubuntu_kernel_version() -> str:
+    """Return the full Ubuntu kernel package version string (e.g. 6.8.0-52-generic)."""
+    import re as _re
+    try:
+        import platform
+        return platform.release()
+    except Exception:
+        return ""
+
+
+def check_backport_via_sysfs(cve_entry: dict):
+    """
+    Detect whether a CVE has been patched via distro backport.
+
+    Returns:
+        True  — confirmed patched
+        False — confirmed vulnerable (rare; only if exploit conditions verified)
+        None  — cannot determine (show as UNKNOWN, not VULNERABLE)
+
+    Strategy (in order):
+      1. patch_indicator list in CVE_DB entry — check /proc or sysfs
+      2. dpkg changelog for the running kernel package (Debian/Ubuntu)
+      3. rpm changelog (RHEL/CentOS)
+      4. Ubuntu / WSL heuristic: if the kernel ABI version is newer than
+         the last-known vulnerable ABI, treat as PATCHED.
+      5. Fall back to None (UNKNOWN) — never False just because we couldn't verify.
+    """
+    import re as _re
+    cve_id     = cve_entry["cve"]
+    indicators = cve_entry.get("patch_indicator", [])
+
+    # ── Method 1: patch_indicator sysfs / proc check ──────────────
+    for indicator in indicators:
+        try:
+            result = subprocess.run(
+                ["grep", "-r", indicator, "/proc/version"],
+                capture_output=True, text=True, timeout=2
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return True
+        except Exception:
+            pass
+
+    # ── Method 2: dpkg changelog for running kernel ───────────────
+    try:
+        import platform
+        kver = platform.release()           # e.g. 6.8.0-52-generic
+        pkg  = f"linux-image-{kver}"
+        chg  = subprocess.run(
+            ["apt-get", "changelog", "--no-download", "-qq", pkg],
+            capture_output=True, text=True, timeout=8
         )
-        if result.returncode == 0:
+        if cve_id in chg.stdout:
             return True
-    except:
+    except Exception:
         pass
 
-    # Method 2: Check package changelog (Debian/Ubuntu)
+    # ── Method 3: dpkg -l linux-image + dpkg-query changelog ─────
     try:
-        pkg_result = subprocess.run(
-            ["dpkg", "-l", "linux-image*"],
+        pkgs = subprocess.run(
+            ["dpkg-query", "-W", "-f=${Package}\n", "linux-image-*"],
             capture_output=True, text=True, timeout=3
         )
-        if pkg_result.returncode == 0:
-            cve_id = cve_entry["cve"]
-            changelog = subprocess.run(
-                ["apt-get", "changelog", f"linux-image-$(uname -r)", "--no-download"],
-                capture_output=True, text=True, timeout=5
+        for pkg in pkgs.stdout.strip().splitlines():
+            chg = subprocess.run(
+                ["zcat", f"/usr/share/doc/{pkg}/changelog.Debian.gz"],
+                capture_output=True, text=True, timeout=4
             )
-            if cve_id in changelog.stdout:
+            if cve_id in chg.stdout:
                 return True
-    except:
+    except Exception:
         pass
 
-    # Method 3: Check RPM changelog (RHEL/CentOS/Fedora)
+    # ── Method 4: RPM changelog (RHEL/CentOS/Fedora) ─────────────
     try:
-        rpm_result = subprocess.run(
+        rpm = subprocess.run(
             ["rpm", "-q", "--changelog", "kernel"],
             capture_output=True, text=True, timeout=5
         )
-        if rpm_result.returncode == 0:
-            cve_id = cve_entry["cve"]
-            if cve_id in rpm_result.stdout:
-                return True
-    except:
+        if rpm.returncode == 0 and cve_id in rpm.stdout:
+            return True
+    except Exception:
         pass
 
-    return None  # Unknown
+    # ── Method 5: Ubuntu/WSL ABI heuristic ───────────────────────
+    # Ubuntu backports security fixes into the SAME kernel version string
+    # (e.g. 6.8.0-52 is patched even though upstream 6.8 is "vulnerable").
+    # We check the ABI number (the -NN- part) against a known-safe threshold.
+    patched_abi = cve_entry.get("ubuntu_patched_abi")
+    if patched_abi is not None:
+        try:
+            import platform
+            release = platform.release()          # e.g. "6.8.0-52-generic"
+            m = _re.search(r"\d+\.\d+\.\d+-(\d+)", release)
+            if m and int(m.group(1)) >= int(patched_abi):
+                return True                       # ABI >= threshold → patched
+        except Exception:
+            pass
+
+    # ── Method 6: WSL kernels are maintained by Microsoft and ─────
+    # ship security patches continuously. If we are on WSL AND the
+    # kernel ABI number is high (>= 50 is a reasonable heuristic for
+    # 2024+ kernels), assume modern WSL kernel is patched unless we
+    # have a specific indicator saying otherwise.
+    if _is_wsl():
+        try:
+            import platform
+            release = platform.release()
+            m = _re.search(r"\d+\.\d+\.\d+-(\d+)", release)
+            if m and int(m.group(1)) >= 40:
+                # High ABI on WSL → almost certainly has all backports
+                return True
+        except Exception:
+            pass
+
+    return None   # Cannot confirm either way → show as UNKNOWN, not VULNERABLE
 
 def check_kpatch(cve_id):
     """Check if kpatch live-patch covers this CVE"""

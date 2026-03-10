@@ -20,6 +20,16 @@ from core.utils import (
     get_distro, system_info, save_json, print_banner as _print_banner,
 )
 
+def _wsl_detected() -> bool:
+    """Return True if running inside WSL."""
+    try:
+        with open("/proc/version") as fh:
+            return "microsoft" in fh.read().lower()
+    except Exception:
+        return False
+
+
+
 # ==============================
 # CVE Database
 # ==============================

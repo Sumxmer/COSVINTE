@@ -7,20 +7,23 @@
 ╚██████╗╚██████╔╝███████║ ╚████╔╝ ██║██║ ╚████║   ██║   ███████╗
  ╚═════╝ ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝
 
-  COSVINTE — Unified Scanner  |  "Conquer Vulnerabilities"
+  COSVINTE — Unified Linux Privilege-Escalation Scanner
+  "Conquer Vulnerabilities"
+
   Integrates: Capabilities · Cron · Kernel · PATH Hijack · Writable Paths
-              + Automatic PDF Report Generation
+              + Attack Chain Analysis · Context-Aware Risk Scoring
+              + Remediation Roadmap · Automatic PDF Report Generation
 
   Usage:
-    python3 cosvinte.py                  # interactive menu (all scanners)
+    python3 cosvinte.py                  # interactive menu
     python3 cosvinte.py --caps           # capabilities only
     python3 cosvinte.py --cron           # cron only
     python3 cosvinte.py --kernel         # kernel only
     python3 cosvinte.py --path           # PATH hijack only
     python3 cosvinte.py --writable       # writable paths only
-    python3 cosvinte.py --all            # run all scanners sequentially
-    python3 cosvinte.py --all --pdf      # run all + generate combined PDF
-    python3 cosvinte.py --no-pdf         # skip PDF generation
+    python3 cosvinte.py --all            # run all 5 scanners + combined PDF
+    python3 cosvinte.py --analyze        # run all + attack chain + remediation
+    python3 cosvinte.py --all --no-pdf   # skip PDF generation
 """
 
 import os
@@ -30,6 +33,8 @@ import platform
 import importlib.util
 import argparse
 from datetime import datetime
+from typing import Optional
+from typing import List, Dict, Tuple
 
 from core.utils import (
     Color as _C, c as cc, system_info as _system_info,
@@ -37,35 +42,25 @@ from core.utils import (
     separator as _separator_fn,
 )
 
-# Shorthand color constants used throughout this file
-R  = _C.RESET
-B  = _C.BOLD
-CY = _C.CYAN
-GR = _C.GREEN
-YE = _C.YELLOW
-RE = _C.RED
-GY = _C.GRAY
-MA = _C.MAGENTA
-WH = _C.WHITE
+# ── Shorthand color constants ──────────────────────────────────────
+R      = _C.RESET
+B      = _C.BOLD
+CY     = _C.CYAN
+GR     = _C.GREEN
+YE     = _C.YELLOW
+RE     = _C.RED
+GY     = _C.GRAY
+MA     = _C.MAGENTA
+WH     = _C.WHITE
 BG_RED = _C.BG_RED
 
-# ─────────────────────────────────────────────────────
-# Resolve sibling module paths
-# ─────────────────────────────────────────────────────
+# ── Resolve the directory this script lives in ────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
-def _load(filename, alias):
-    """Dynamically load a scanner module by filename or absolute path."""
-    path = filename if os.path.isabs(filename) else os.path.join(_HERE, filename)
-    if not os.path.exists(path):
-        return None
-    spec = importlib.util.spec_from_file_location(alias, path)
-    mod  = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-BANNER = f"""
-{CY}{B}
+# ══════════════════════════════════════════════════════════════════
+#  BANNER
+# ══════════════════════════════════════════════════════════════════
+BANNER = f"""\n{CY}{B}\
  ██████╗ ██████╗ ███████╗██╗   ██╗██╗███╗   ██╗████████╗███████╗
 ██╔════╝██╔═══██╗██╔════╝██║   ██║██║████╗  ██║╚══██╔══╝██╔════╝
 ██║     ██║   ██║███████╗██║   ██║██║██╔██╗ ██║   ██║   █████╗
@@ -75,81 +70,289 @@ BANNER = f"""
 {GY}  Unified Scanner Suite  |  "Conquer Vulnerabilities"{R}
 """
 
-# ─────────────────────────────────────────────────────
-# PDF generator import
-# ─────────────────────────────────────────────────────
-def _load_pdf():
-    # Try sibling cosvinte_pdf_report.py first, then core/pdf_report.py
-    mod = _load("cosvinte_pdf_report.py", "cosvinte_pdf")
-    if mod is None:
-        mod = _load(os.path.join(_HERE, "core", "pdf_report.py"), "cosvinte_pdf")
-    if mod is None:
-        print(cc(YE, "  ⚠  PDF report module not found — PDF generation disabled."))
+
+# ══════════════════════════════════════════════════════════════════
+#  MODULE LOADER
+# ══════════════════════════════════════════════════════════════════
+
+def _load_module(filename: str, alias: str):
+    """Load a Python module by filename or absolute path.
+
+    Returns the module object, or None if the file does not exist.
+    Raises ImportError if the file exists but cannot be imported.
+    """
+    path = filename if os.path.isabs(filename) else os.path.join(_HERE, filename)
+    if not os.path.exists(path):
+        return None
+    spec = importlib.util.spec_from_file_location(alias, path)
+    mod  = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
     return mod
 
-# ─────────────────────────────────────────────────────
+
+def _find_scanner(name: str, alias: str):
+    """Locate and load a scanner module by searching known path conventions.
+
+    Search order:
+      1. <HERE>/<name>.py
+      2. <HERE>/scanners/<name>.py
+      3. <HERE>/scanners_<name>.py
+
+    Raises:
+        FileNotFoundError: if no matching file is found.
+    """
+    candidates = [
+        os.path.join(_HERE, "scanners", f"{name}.py"),   # primary: scanners/ subfolder
+        os.path.join(_HERE, f"{name}.py"),                # fallback: flat layout
+        os.path.join(_HERE, f"scanners_{name}.py"),       # legacy flat layout
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return _load_module(path, alias)
+    raise FileNotFoundError(
+        f"Scanner module '{name}' not found. Checked:\n"
+        + "\n".join(f"  • {p}" for p in candidates)
+    )
+
+
+
+# ══════════════════════════════════════════════════════════════════
+#  STARTUP HEALTH CHECK
+# ══════════════════════════════════════════════════════════════════
+
+_REQUIRED_SCANNERS = {
+    "Capabilities_cve": "caps",
+    "cron_cve":          "cron",
+    "kernel_cve":        "kernel",
+    "PATH_hijack":       "path",
+    "Writable_paths_cve": "writable",
+}
+
+
+def _health_check(silent: bool = False) -> bool:
+    """Verify all required scanner modules are present.
+
+    Args:
+        silent: If True, suppress output (useful for --help).
+
+    Returns:
+        True if all modules found, False otherwise.
+    """
+    missing = []
+    for name in _REQUIRED_SCANNERS:
+        candidates = [
+            os.path.join(_HERE, "scanners", f"{name}.py"),
+            os.path.join(_HERE, f"{name}.py"),
+            os.path.join(_HERE, f"scanners_{name}.py"),
+        ]
+        if not any(os.path.exists(p) for p in candidates):
+            missing.append(name)
+
+    if missing and not silent:
+        print(cc(RE + B, "\n  ✖  Missing required scanner modules:"))
+        for m in missing:
+            print(cc(RE, f"       • {m}.py"))
+        print(cc(YE, "\n  Place the missing files in the same directory as cosvinte.py\n"))
+
+    return len(missing) == 0
+
+
+# ══════════════════════════════════════════════════════════════════
+#  OPTIONAL MODULE LOADERS
+# ══════════════════════════════════════════════════════════════════
+
+def _load_pdf():
+    """Load the PDF report module.
+
+    Search order:
+      1. <HERE>/core/pdf_report.py     (primary — matches project structure)
+      2. <HERE>/pdf_report.py          (fallback flat layout)
+      3. <HERE>/cosvinte_pdf_report.py (legacy name)
+    """
+    import importlib.util as _ilu
+    candidates = [
+        os.path.join(_HERE, "core", "pdf_report.py"),
+        os.path.join(_HERE, "pdf_report.py"),
+        os.path.join(_HERE, "cosvinte_pdf_report.py"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            spec = _ilu.spec_from_file_location("cosvinte_pdf", path)
+            mod  = _ilu.module_from_spec(spec)
+            try:
+                spec.loader.exec_module(mod)
+                return mod
+            except Exception as exc:
+                print(cc(RE, f"  ✖  Failed to load {os.path.basename(path)}: {exc}"))
+                return None
+
+    print(cc(YE,
+        "  ⚠  PDF generation disabled: pdf_report.py not found.\n"
+        f"     Expected: {os.path.join(_HERE, 'pdf_report.py')}"
+    ))
+    return None
+
+
+def _load_optional_module(filename: str, alias: str, label: str):
+    """Load a support module by direct filename from _HERE. Silent on missing."""
+    path = os.path.join(_HERE, filename)
+    if not os.path.exists(path):
+        print(cc(YE, f"  ⚠  {label} disabled ({filename} not found next to cosvinte.py)."))
+        return None
+    return _load_module(path, alias)
+
 
 def _load_attack_chain():
-    mod = _load("attack_chain.py", "attack_chain")
-    if mod is None:
-        mod = _load(os.path.join(_HERE, "core", "attack_chain.py"), "attack_chain")
-    if mod is None:
-        print(cc(YE, "  Attack Chain analysis disabled."))
-    return mod
+    for path in [
+        os.path.join(_HERE, "core",     "attack_chain.py"),
+        os.path.join(_HERE, "attack_chain.py"),
+    ]:
+        if os.path.exists(path):
+            return _load_module(path, "attack_chain")
+    print(cc(YE, "  ⚠  Attack Chain analysis disabled (core/attack_chain.py not found)."))
+    return None
+
 
 def _load_risk_scoring():
-    mod = _load("risk_scoring.py", "risk_scoring")
-    if mod is None:
-        mod = _load(os.path.join(_HERE, "core", "risk_scoring.py"), "risk_scoring")
-    if mod is None:
-        print(cc(YE, "  Context-Aware Scoring disabled."))
-    return mod
+    for path in [
+        os.path.join(_HERE, "core",     "risk_scoring.py"),
+        os.path.join(_HERE, "risk_scoring.py"),
+    ]:
+        if os.path.exists(path):
+            return _load_module(path, "risk_scoring")
+    print(cc(YE, "  ⚠  Context-Aware Risk Scoring disabled (core/risk_scoring.py not found)."))
+    return None
+
 
 def _load_remediation():
-    mod = _load("remediation.py", "remediation")
-    if mod is None:
-        mod = _load("scanners_remediation.py", "remediation")
-    if mod is None:
-        mod = _load(os.path.join(_HERE, "scanners", "remediation.py"), "remediation")
-    if mod is None:
-        print(cc(YE, "  Remediation Roadmap disabled."))
-    return mod
+    for path in [
+        os.path.join(_HERE, "scanners", "remediation.py"),
+        os.path.join(_HERE, "core",     "remediation.py"),
+        os.path.join(_HERE, "remediation.py"),
+    ]:
+        if os.path.exists(path):
+            return _load_module(path, "remediation")
+    print(cc(YE, "  ⚠  Remediation Roadmap disabled (scanners/remediation.py not found)."))
+    return None
 
-# ─────────────────────────────────────────────────────
-# Shared report-building helpers (thin wrappers)
-# ─────────────────────────────────────────────────────
 
-def _generate_pdf(pdf_mod, report, prefix):
+# ══════════════════════════════════════════════════════════════════
+#  PDF GENERATION HELPER  (single definition — no duplication)
+# ══════════════════════════════════════════════════════════════════
+
+def _generate_pdf(pdf_mod, report: dict, prefix: str) -> Optional[str]:
+    """Generate a PDF from *report* and save it under reports/<prefix>_<ts>.pdf.
+
+    Returns the output path on success, or None on failure.
+    """
+    if pdf_mod is None:
+        return None
     ts          = datetime.now().strftime("%Y%m%d_%H%M%S")
     reports_dir = os.path.join(_HERE, "reports")
     os.makedirs(reports_dir, exist_ok=True)
     path = os.path.join(reports_dir, f"{prefix}_{ts}.pdf")
     try:
         out = pdf_mod.generate_pdf(report, path)
-        print(cc(GR, f"  ✔  PDF report → {cc(WH+B, out)}"))
+        print(cc(GR, f"  ✔  PDF report → {cc(WH + B, out)}"))
         return out
-    except Exception as e:
-        print(cc(RE, f"  ✖  PDF generation failed: {e}"))
+    except Exception as exc:
+        print(cc(RE, f"  ✖  PDF generation failed: {exc}"))
         return None
 
-# ─────────────────────────────────────────────────────
-# ══════════════════════════════════════════════════════
-#  SCANNER 1 — CAPABILITIES
-# ══════════════════════════════════════════════════════
-# ─────────────────────────────────────────────────────
-def run_capabilities(pdf_mod=None):
-    caps = _load("Capabilities_cve.py", "caps") or _load("scanners_Capabilities_cve.py", "caps") or _load(os.path.join(_HERE, "scanners", "Capabilities_cve.py"), "caps")
-    if caps is None:
-        print(cc(RE, "  ✖  Capabilities_cve.py not found.")); return None
+
+def _build_combined_pdf(pdf_mod, reports: list, prefix: str = "cosvinte_combined") -> None:
+    """Merge *reports* into a combined report dict and generate one PDF."""
+    combined = _merge_reports(reports)
+    print(cc(CY + B, "\n  ▸  Generating combined PDF report …"))
+    _generate_pdf(pdf_mod, combined, prefix)
+
+
+# ══════════════════════════════════════════════════════════════════
+#  REPORT MERGE HELPER
+# ══════════════════════════════════════════════════════════════════
+
+def _merge_reports(reports: list) -> dict:
+    """Merge multiple scanner report dicts into one combined report."""
+    all_findings  = []
+    all_cve_corr  = []
+    all_writable  = []
+    all_checks    = {}
+    all_path      = []
+    all_env       = []
+    all_suid      = []
+    max_cvss      = 0.0
+    summary_acc   = {}
+    scanner_names = []
+
+    for r in reports:
+        if not r:
+            continue
+        tool = r.get("tool", "")
+        scanner_names.append(tool.replace("COSVINTE — ", ""))
+        max_cvss = max(max_cvss, float(r.get("summary", {}).get("overall_cvss", 0)))
+
+        for key, target in [
+            ("findings",         all_findings),
+            ("cve_correlations", all_cve_corr),
+            ("writable_paths",   all_writable),
+            ("path_analysis",    all_path),
+            ("env_var_findings", all_env),
+            ("suid_binaries",    all_suid),
+        ]:
+            target.extend(r.get(key, []))
+
+        if "checks" in r:
+            all_checks.update(r["checks"])
+
+        for k, v in r.get("summary", {}).items():
+            if k in ("overall_cvss", "overall_severity", "overall_score"):
+                continue
+            try:
+                summary_acc[k] = summary_acc.get(k, 0) + int(v)
+            except (TypeError, ValueError):
+                pass
+
+    summary_acc["overall_cvss"]     = max_cvss
+    summary_acc["overall_severity"] = _sev_from_score(max_cvss)
+
+    combined: dict = {
+        "tool":      f"COSVINTE — Combined Scan: {' · '.join(scanner_names)}",
+        "timestamp": datetime.now().isoformat(),
+        "system":    _system_info(),
+        "summary":   summary_acc,
+    }
+    if all_findings:  combined["findings"]         = all_findings
+    if all_checks:    combined["checks"]           = all_checks
+    if all_writable:  combined["writable_paths"]   = all_writable
+    if all_cve_corr:  combined["cve_correlations"] = all_cve_corr
+    if all_path:      combined["path_analysis"]    = all_path
+    if all_env:       combined["env_var_findings"] = all_env
+    if all_suid:      combined["suid_binaries"]    = all_suid
+    return combined
+
+
+# ══════════════════════════════════════════════════════════════════
+#  INDIVIDUAL SCANNER RUNNERS
+# ══════════════════════════════════════════════════════════════════
+
+def run_capabilities(pdf_mod=None) -> Optional[dict]:
+    try:
+        caps = _find_scanner("Capabilities_cve", "caps")
+    except FileNotFoundError as exc:
+        print(cc(RE, f"  ✖  {exc}")); return None
 
     caps.print_banner()
+    # When called from CLI (--caps / --all), always use Real Scan (no interactive prompt)
+    import sys as _sys
+    if _sys.stdin.isatty():
+        print(cc(CY + B, "  Select Mode:"))
+        print(f"  {cc(WH, '1')} {cc(GY, '─')} Real Scan (getcap -r /)")
+        print(f"  {cc(WH, '2')} {cc(GY, '─')} Lab Simulation (safe demo)\n")
+        choice = input(cc(CY, "  Enter choice [1/2]: ")).strip() or "1"
+    else:
+        choice = "1"  # non-interactive (Docker / pipe) → always Real Scan
 
-    print(cc(CY+B, "  Select Mode:"))
-    print(f"  {cc(WH,'1')} {cc(GY,'─')} Real Scan (getcap -r /)")
-    print(f"  {cc(WH,'2')} {cc(GY,'─')} Lab Simulation (safe demo)\n")
-    mode = input(cc(CY, "  Enter choice [1/2]: ")).strip()
-
-    if mode == "2":
+    if choice == "2":
         lines      = caps.setup_lab()
         mode_label = "Lab Simulation"
     else:
@@ -159,7 +362,6 @@ def run_capabilities(pdf_mod=None):
         print(cc(GR, f" {len(lines)} entries found\n"))
 
     caps.print_sysinfo(mode_label)
-
     print(cc(CY, "  [*] Analysing capabilities …"), end="", flush=True)
     findings = caps.analyze_capabilities(lines)
     print(cc(GR, f" {len(findings)} findings\n"))
@@ -167,59 +369,54 @@ def run_capabilities(pdf_mod=None):
     caps.print_findings(findings)
     caps.print_summary(findings)
 
-    # ── build report dict ──
     max_score = max((f["risk_score"] for f in findings), default=0)
     report = {
         "tool":      "COSVINTE — Linux Capability Scanner",
         "timestamp": datetime.now().isoformat(),
         "system":    _system_info(),
         "summary": {
-            "total_findings":  len(findings),
-            "critical":        sum(1 for f in findings if f["severity"] == "CRITICAL"),
-            "high":            sum(1 for f in findings if f["severity"] == "HIGH"),
-            "medium":          sum(1 for f in findings if f["severity"] == "MEDIUM"),
-            "low":             sum(1 for f in findings if f["severity"] == "LOW"),
-            "interpreters":    sum(1 for f in findings if f.get("is_interpreter")),
-            "world_writable":  sum(1 for f in findings if f.get("world_writable")),
-            "overall_score":   max_score,
-            "overall_cvss":    max_score,
+            "total_findings":   len(findings),
+            "critical":         sum(1 for f in findings if f["severity"] == "CRITICAL"),
+            "high":             sum(1 for f in findings if f["severity"] == "HIGH"),
+            "medium":           sum(1 for f in findings if f["severity"] == "MEDIUM"),
+            "low":              sum(1 for f in findings if f["severity"] == "LOW"),
+            "interpreters":     sum(1 for f in findings if f.get("is_interpreter")),
+            "world_writable":   sum(1 for f in findings if f.get("world_writable")),
+            "overall_score":    max_score,
+            "overall_cvss":     max_score,
             "overall_severity": _sev_from_score(max_score),
         },
         "findings": findings,
     }
-
-
     if pdf_mod:
         _generate_pdf(pdf_mod, report, "cosvinte_caps")
-
     return report
 
 
-# ─────────────────────────────────────────────────────
-# ══════════════════════════════════════════════════════
-#  SCANNER 2 — CRON
-# ══════════════════════════════════════════════════════
-# ─────────────────────────────────────────────────────
-def run_cron(pdf_mod=None):
-    cron = _load("cron_cve.py", "cron") or _load("scanners_cron_cve.py", "cron") or _load(os.path.join(_HERE, "scanners", "cron_cve.py"), "cron")
-    if cron is None:
-        print(cc(RE, "  ✖  cron_cve.py not found.")); return None
+def run_cron(pdf_mod=None) -> Optional[dict]:
+    try:
+        cron = _find_scanner("cron_cve", "cron")
+    except FileNotFoundError as exc:
+        print(cc(RE, f"  ✖  {exc}")); return None
 
     cron.print_banner()
+    import sys as _sys
+    if _sys.stdin.isatty():
+        print(cc(CY + B, "  Select Mode:"))
+        print(f"  {cc(WH, '1')} {cc(GY, '─')} Real Scan (auto-detect or manual)")
+        print(f"  {cc(WH, '2')} {cc(GY, '─')} Lab Simulation (safe test environment)")
+        print(f"  {cc(WH, '3')} {cc(GY, '─')} Manual Input\n")
+        choice = input(cc(CY, "  Enter choice [1/2/3]: ")).strip() or "1"
+    else:
+        choice = "1"  # non-interactive → Real Scan
 
-    print(cc(CY+B, "  Select Mode:"))
-    print(f"  {cc(WH,'1')} {cc(GY,'─')} Real Scan (auto-detect or manual)")
-    print(f"  {cc(WH,'2')} {cc(GY,'─')} Lab Simulation (safe test environment)")
-    print(f"  {cc(WH,'3')} {cc(GY,'─')} Manual Input\n")
-    mode = input(cc(CY, "  Enter choice [1/2/3]: ")).strip()
-
-    if mode == "2":
+    if choice == "2":
         base         = cron.setup_lab_environment()
         cron_type    = "cronie"
         cron_version = "1.4.0"
         mode_label   = "Lab Simulation"
-    elif mode == "3":
-        base = "/"
+    elif choice == "3":
+        base         = "/"
         print()
         cron_type    = input(cc(CY, "  Cron type (cronie/vixie/dcron/debian cron): ")).strip()
         cron_version = input(cc(CY, "  Cron version (e.g. 1.4.0): ")).strip()
@@ -233,13 +430,16 @@ def run_cron(pdf_mod=None):
             print(cc(GR, f" found: {cron_type} v{cron_version}\n"))
         else:
             print(cc(YE, " not detected\n"))
-            cron_type    = input(cc(CY, "  Cron type (cronie/vixie/dcron/debian cron): ")).strip()
-            cron_version = input(cc(CY, "  Cron version (e.g. 1.4.0): ")).strip()
-            mode_label   = "Manual Input"
+            if _sys.stdin.isatty():
+                cron_type    = input(cc(CY, "  Cron type (cronie/vixie/dcron/debian cron): ")).strip()
+                cron_version = input(cc(CY, "  Cron version (e.g. 1.4.0): ")).strip()
+            else:
+                cron_type    = "debian cron"
+                cron_version = "3.0"
+            mode_label = "Manual Input"
 
     print()
     cron.print_sysinfo(cron_type, cron_version, mode_label, base)
-
     print(cc(CY, "  [*] Running detection checks …"), end="", flush=True)
     findings, checks = cron.run_scan(cron_type, cron_version, base)
     print(cc(GR, " done\n"))
@@ -248,9 +448,8 @@ def run_cron(pdf_mod=None):
     cron.print_findings(findings)
     cron.print_summary(cron_type, cron_version, findings, checks)
 
-    # ── build report dict ──
-    max_cvss = max((f["cvss"] for f in findings), default=0)
-    checks_triggered = sum(1 for v, _ in checks.values() if v) if checks else 0
+    max_cvss          = max((f["cvss"] for f in findings), default=0)
+    checks_triggered  = sum(1 for v, _ in checks.values() if v) if checks else 0
     report = {
         "tool":      "COSVINTE — Cron CVE Scanner",
         "timestamp": datetime.now().isoformat(),
@@ -265,41 +464,32 @@ def run_cron(pdf_mod=None):
             for k, (v, d) in checks.items()
         },
         "summary": {
-            "total_cve_db":    len(cron.CVE_DB),
-            "total_findings":  len(findings),
+            "total_cve_db":     len(cron.CVE_DB),
+            "total_findings":   len(findings),
             "checks_triggered": checks_triggered,
-            "overall_cvss":    max_cvss,
+            "overall_cvss":     max_cvss,
             "overall_severity": _sev_from_score(max_cvss),
         },
         "findings": [{k: v for k, v in f.items() if k != "detail"} for f in findings],
     }
-
-
     if pdf_mod:
         _generate_pdf(pdf_mod, report, "cosvinte_cron")
-
     return report
 
 
-# ─────────────────────────────────────────────────────
-# ══════════════════════════════════════════════════════
-#  SCANNER 3 — KERNEL
-# ══════════════════════════════════════════════════════
-# ─────────────────────────────────────────────────────
-def run_kernel(pdf_mod=None):
-    kern = _load("kernel_cve.py", "kernel") or _load("scanners_kernel_cve.py", "kernel") or _load(os.path.join(_HERE, "scanners", "kernel_cve.py"), "kernel")
-    if kern is None:
-        print(cc(RE, "  ✖  kernel_cve.py not found.")); return None
+def run_kernel(pdf_mod=None) -> Optional[dict]:
+    try:
+        kern = _find_scanner("kernel_cve", "kernel")
+    except FileNotFoundError as exc:
+        print(cc(RE, f"  ✖  {exc}")); return None
 
     kern.print_banner()
-
     kernel_ver, kernel_full = kern.get_kernel_version()
     distro   = kern.get_distro()
     hostname = kern.get_hostname()
     arch     = kern.get_arch()
 
     kern.print_sysinfo(kernel_full, distro, hostname, arch)
-
     print(cc(CY, "  [*] Scanning against CVE database …"), end="", flush=True)
     findings = kern.scan_kernel(kernel_ver)
     print(cc(GR, " done\n"))
@@ -307,7 +497,6 @@ def run_kernel(pdf_mod=None):
     kern.print_findings(findings)
     kern.print_summary(findings, kernel_ver)
 
-    # ── build report dict ──
     max_cvss = max((f["cvss"] for f in findings), default=0)
     report = {
         "tool":      "COSVINTE — Kernel CVE Scanner",
@@ -320,106 +509,90 @@ def run_kernel(pdf_mod=None):
             "kernel_full":    kernel_full,
         },
         "summary": {
-            "total_cve_db":    len(kern.CVE_DB),
-            "total_matches":   len(findings),
-            "vulnerable":      sum(1 for f in findings if f["status"] == "VULNERABLE"),
-            "unverified":      sum(1 for f in findings if f["status"] == "UNKNOWN"),
-            "patched":         sum(1 for f in findings if f["status"] == "PATCHED"),
-            "overall_cvss":    max_cvss,
+            "total_cve_db":     len(kern.CVE_DB),
+            "total_matches":    len(findings),
+            "vulnerable":       sum(1 for f in findings if f["status"] == "VULNERABLE"),
+            "unverified":       sum(1 for f in findings if f["status"] == "UNKNOWN"),
+            "patched":          sum(1 for f in findings if f["status"] == "PATCHED"),
+            "overall_cvss":     max_cvss,
             "overall_severity": _sev_from_score(max_cvss),
         },
         "findings": findings,
     }
-
-
     if pdf_mod:
         _generate_pdf(pdf_mod, report, "cosvinte_kernel")
-
     return report
 
 
-# ─────────────────────────────────────────────────────
-# ══════════════════════════════════════════════════════
-#  SCANNER 4 — PATH HIJACK
-# ══════════════════════════════════════════════════════
-# ─────────────────────────────────────────────────────
-def run_path(pdf_mod=None):
-    path = _load("PATH_hijack.py", "path_hijack") or _load("scanners_PATH_hijack.py", "path_hijack") or _load(os.path.join(_HERE, "scanners", "PATH_hijack.py"), "path_hijack")
-    if path is None:
-        print(cc(RE, "  ✖  PATH_hijack.py not found.")); return None
+def run_path(pdf_mod=None) -> Optional[dict]:
+    try:
+        path_mod = _find_scanner("PATH_hijack", "path_hijack")
+    except FileNotFoundError as exc:
+        print(cc(RE, f"  ✖  {exc}")); return None
 
-    path.print_banner()
-    path.print_sysinfo()
+    path_mod.print_banner()
+    path_mod.print_sysinfo()
 
     print(cc(CY, "  [*] Analysing PATH variable …"), end="", flush=True)
-    path_f = path.scan_path()
+    path_f = path_mod.scan_path()
     print(cc(GR, f" {len(path_f)} entries\n"))
 
     print(cc(CY, "  [*] Scanning environment variables …"), end="", flush=True)
-    env_f = path.scan_env_vars()
+    env_f = path_mod.scan_env_vars()
     print(cc(GR, f" {len(env_f)} suspicious\n"))
 
     print(cc(CY, "  [*] Scanning SUID binaries (may take a moment) …"), end="", flush=True)
-    suid_f = path.scan_suid_binaries()
+    suid_f = path_mod.scan_suid_binaries()
     print(cc(GR, f" {len(suid_f)} found\n"))
 
     print(cc(CY, "  [*] Correlating CVEs …"), end="", flush=True)
-    cve_f = path.correlate_cve(path_f, env_f, suid_f)
+    cve_f = path_mod.correlate_cve(path_f, env_f, suid_f)
     print(cc(GR, f" {len(cve_f)} matched\n"))
 
-    path.print_path_analysis(path_f)
-    path.print_env_analysis(env_f)
-    path.print_suid_analysis(suid_f)
-    path.print_cve(cve_f)
-    path.print_summary(path_f, env_f, suid_f, cve_f)
+    path_mod.print_path_analysis(path_f)
+    path_mod.print_env_analysis(env_f)
+    path_mod.print_suid_analysis(suid_f)
+    path_mod.print_cve(cve_f)
+    path_mod.print_summary(path_f, env_f, suid_f, cve_f)
 
-    # ── build report dict ──
     max_cvss = max((f["cvss"] for f in cve_f), default=0)
     report = {
         "tool":      "COSVINTE — PATH Hijack Scanner",
         "timestamp": datetime.now().isoformat(),
         "system": {
             **_system_info(),
-            "user": path.get_current_user(),
+            "user": path_mod.get_current_user(),
             "uid":  os.getuid(),
         },
         "summary": {
-            "path_entries":       len(path_f),
-            "writable_path_dirs": sum(1 for f in path_f if f.get("world_writable")),
-            "relative_path_dirs": sum(1 for f in path_f if f.get("relative")),
-            "phantom_path_dirs":  sum(1 for f in path_f if not f.get("exists")),
-            "dangerous_env_vars": len(env_f),
-            "suid_binaries":      len(suid_f),
-            "dangerous_suid":     sum(1 for f in suid_f if f.get("dangerous")),
+            "path_entries":           len(path_f),
+            "writable_path_dirs":     sum(1 for f in path_f if f.get("world_writable")),
+            "relative_path_dirs":     sum(1 for f in path_f if f.get("relative")),
+            "phantom_path_dirs":      sum(1 for f in path_f if not f.get("exists")),
+            "dangerous_env_vars":     len(env_f),
+            "suid_binaries":          len(suid_f),
+            "dangerous_suid":         sum(1 for f in suid_f if f.get("dangerous")),
             "total_cve_correlations": len(cve_f),
-            "overall_cvss":       max_cvss,
-            "overall_severity":   _sev_from_score(max_cvss),
+            "overall_cvss":           max_cvss,
+            "overall_severity":       _sev_from_score(max_cvss),
         },
         "path_analysis":    path_f,
         "env_var_findings": env_f,
         "suid_binaries":    suid_f,
         "cve_correlations": [
-            {k: v for k, v in e.items() if k != "trigger"}
-            for e in cve_f
+            {k: v for k, v in e.items() if k != "trigger"} for e in cve_f
         ],
     }
-
-
     if pdf_mod:
         _generate_pdf(pdf_mod, report, "cosvinte_path")
-
     return report
 
 
-# ─────────────────────────────────────────────────────
-# ══════════════════════════════════════════════════════
-#  SCANNER 5 — WRITABLE PATHS
-# ══════════════════════════════════════════════════════
-# ─────────────────────────────────────────────────────
-def run_writable(pdf_mod=None):
-    wp = _load("Writable_paths_cve.py", "writable") or _load("scanners_Writable_paths_cve.py", "writable") or _load(os.path.join(_HERE, "scanners", "Writable_paths_cve.py"), "writable")
-    if wp is None:
-        print(cc(RE, "  ✖  Writable_paths_cve.py not found.")); return None
+def run_writable(pdf_mod=None) -> Optional[dict]:
+    try:
+        wp = _find_scanner("Writable_paths_cve", "writable")
+    except FileNotFoundError as exc:
+        print(cc(RE, f"  ✖  {exc}")); return None
 
     wp.print_banner()
     wp.print_sysinfo()
@@ -436,200 +609,40 @@ def run_writable(pdf_mod=None):
     wp.print_cve(cve_hits)
     wp.print_summary(writable, cve_hits)
 
-    # ── build report dict ──
     max_cvss = max((f["cvss"] for f in cve_hits), default=0)
     report = {
         "tool":      "COSVINTE — Writable Path Scanner",
         "timestamp": datetime.now().isoformat(),
         "system":    _system_info(),
         "summary": {
-            "total_writable_paths":  len(writable),
+            "total_writable_paths":   len(writable),
             "total_cve_correlations": len(cve_hits),
-            "overall_cvss":          max_cvss,
-            "overall_severity":      _sev_from_score(max_cvss),
+            "overall_cvss":           max_cvss,
+            "overall_severity":       _sev_from_score(max_cvss),
         },
-        "writable_paths": writable,
+        "writable_paths":  writable,
         "cve_correlations": [
-            {k: v for k, v in e.items() if k != "path_patterns"}
-            for e in cve_hits
+            {k: v for k, v in e.items() if k != "path_patterns"} for e in cve_hits
         ],
     }
-
-
     if pdf_mod:
         _generate_pdf(pdf_mod, report, "cosvinte_writable")
-
     return report
 
 
-# ─────────────────────────────────────────────────────
-# ══════════════════════════════════════════════════════
-#  COMBINED PDF — merge all results into one report
-# ══════════════════════════════════════════════════════
-# ─────────────────────────────────────────────────────
-def _combined_report(reports: list) -> dict:
-    """Merge multiple scanner reports into one combined PDF report."""
-    all_findings     = []
-    all_cve_corr     = []
-    all_writable     = []
-    all_checks       = {}
-    all_path         = []
-    all_env          = []
-    all_suid         = []
-    max_cvss         = 0.0
-    combined_summary = {}
+# ══════════════════════════════════════════════════════════════════
+#  SCANNER REGISTRY
+# ══════════════════════════════════════════════════════════════════
 
-    scanner_names = []
-    for r in reports:
-        if not r: continue
-        tool = r.get("tool", "")
-        scanner_names.append(tool.replace("COSVINTE — ", ""))
-        max_cvss = max(max_cvss, float(r.get("summary", {}).get("overall_cvss", 0)))
-
-        if "findings" in r:
-            all_findings.extend(r["findings"])
-        if "cve_correlations" in r:
-            all_cve_corr.extend(r["cve_correlations"])
-        if "writable_paths" in r:
-            all_writable.extend(r["writable_paths"])
-        if "checks" in r:
-            all_checks.update(r["checks"])
-        if "path_analysis" in r:
-            all_path.extend(r["path_analysis"])
-        if "env_var_findings" in r:
-            all_env.extend(r["env_var_findings"])
-        if "suid_binaries" in r:
-            all_suid.extend(r["suid_binaries"])
-
-        # Merge summary metrics
-        for k, v in r.get("summary", {}).items():
-            if k in ("overall_cvss", "overall_severity", "overall_score"): continue
-            try:
-                combined_summary[k] = combined_summary.get(k, 0) + int(v)
-            except (TypeError, ValueError):
-                pass
-
-    combined_summary["overall_cvss"]    = max_cvss
-    combined_summary["overall_severity"] = _sev_from_score(max_cvss)
-
-    report = {
-        "tool":      f"COSVINTE — Combined Scan: {' · '.join(scanner_names)}",
-        "timestamp": datetime.now().isoformat(),
-        "system":    _system_info(),
-        "summary":   combined_summary,
-    }
-    if all_findings:   report["findings"]         = all_findings
-    if all_checks:     report["checks"]           = all_checks
-    if all_writable:   report["writable_paths"]   = all_writable
-    if all_cve_corr:   report["cve_correlations"] = all_cve_corr
-    if all_path:       report["path_analysis"]    = all_path
-    if all_env:        report["env_var_findings"] = all_env
-    if all_suid:       report["suid_binaries"]    = all_suid
-
-    return report
-
-
-
-# ─────────────────────────────────────────────────────
-# ══════════════════════════════════════════════════════
-#  ALL SCANNERS + ATTACK CHAIN + RISK SCORING + ROADMAP
-# ══════════════════════════════════════════════════════
-# ─────────────────────────────────────────────────────
-def run_all_plus(pdf_mod=None):
-    """Run all scanners then proceed with Attack Chain, Risk Scoring, and Remediation Roadmap."""
-
-    # Load modules
-    ac_mod   = _load_attack_chain()
-    rs_mod   = _load_risk_scoring()
-    rem_mod  = _load_remediation()
-
-    # Run all scanners and collect reports
-    reports_list = []
-    reports_dict = {}
-    for _, _, key in MENU_ITEMS:
-        if key in RUNNER_MAP:
-            _separator()
-            print(cc(MA+B, f"\n  ▸  Running {key.upper()} scanner ...\n"))
-            r = RUNNER_MAP[key](None)   # PDF will be generated later
-            reports_list.append(r)
-            if r:
-                reports_dict[key] = r
-
-    _separator()
-
-    # ── Context-Aware Risk Scoring ──
-    scored_reports = reports_dict
-    if rs_mod and reports_dict:
-        print(cc(CY+B, "\n  ▸  Context-Aware Risk Scoring ...\n"))
-        rs_mod.print_banner()
-        factors = rs_mod.collect_context()
-        rs_mod.print_context_factors(factors)
-        scored_reports = rs_mod.score_all_reports(reports_dict)
-        rs_mod.print_top_findings(scored_reports, top_n=10)
-        rs_mod.print_summary(scored_reports)
-        _separator()
-
-    # ── Attack Chain Builder ──
-    chains = []
-    if ac_mod and reports_dict:
-        print(cc(CY+B, "\n  ▸  Attack Chain Analysis ...\n"))
-        ac_mod.print_banner()
-        mem = ac_mod.check_memory_protections()
-        ac_mod.print_mem_protections(mem)
-        chains = ac_mod.build_chains(scored_reports)
-        ac_mod.print_chains(chains)
-        ac_mod.print_summary(chains)
-        _separator()
-
-    # ── Remediation Roadmap ──
-    actions = []
-    if rem_mod and reports_dict:
-        print(cc(CY+B, "\n  ▸  Remediation Roadmap ...\n"))
-        rem_mod.print_banner()
-        actions = rem_mod.build_roadmap(scored_reports, chains)
-        rem_mod.print_roadmap(actions)
-        rem_mod.print_summary(actions, chains)
-        _separator()
-
-    # ── Combined Report ──
-    combined = _combined_report(reports_list)
-
-    # Add analysis results into combined report
-    if ac_mod and chains:
-        combined["attack_chains"] = ac_mod.chains_to_report_dict(chains)
-    if rem_mod and actions:
-        combined["remediation_roadmap"] = rem_mod.roadmap_to_report_dict(actions)
-    if rs_mod and "_context_factors" in scored_reports:
-        combined["context_factors"] = {
-            k: {"active": v.get("active"), "weight": v.get("weight"), "label_th": v.get("label_th", "")}
-            for k, v in scored_reports["_context_factors"].items()
-        }
-
-    # Save JSON
-
-    # Generate combined PDF
-    if pdf_mod and any(reports_list):
-        print(cc(CY+B, "\n  ▸  Generating combined PDF report ..."))
-        _generate_pdf(pdf_mod, combined, "cosvinte_full")
-
-    print(cc(GR+B, "\n  ✔  Full analysis complete.\n"))
-    return combined
-
-
-# ─────────────────────────────────────────────────────
-# ══════════════════════════════════════════════════════
-#  INTERACTIVE MENU
-# ══════════════════════════════════════════════════════
-# ─────────────────────────────────────────────────────
 MENU_ITEMS = [
-    ("1", "Linux Capability Scanner",       "caps"),
-    ("2", "Cron CVE Scanner",               "cron"),
-    ("3", "Kernel CVE Scanner",             "kernel"),
-    ("4", "PATH Hijack Scanner",            "path"),
-    ("5", "Writable Path Scanner",          "writable"),
-    ("6", "Run ALL Scanners",               "all"),
-    ("7", "ALL + Attack Chain + Remediation", "all_plus"),
-    ("0", "Exit",                           "exit"),
+    ("1", "Linux Capability Scanner",          "caps"),
+    ("2", "Cron CVE Scanner",                  "cron"),
+    ("3", "Kernel CVE Scanner",                "kernel"),
+    ("4", "PATH Hijack Scanner",               "path"),
+    ("5", "Writable Path Scanner",             "writable"),
+    ("6", "Run ALL Scanners",                  "all"),
+    ("7", "ALL + Attack Chain + Remediation",  "all_plus"),
+    ("0", "Exit",                              "exit"),
 ]
 
 RUNNER_MAP = {
@@ -640,145 +653,235 @@ RUNNER_MAP = {
     "writable": run_writable,
 }
 
-# all_plus is handled separately (not in RUNNER_MAP to avoid recursion)
 
-def _separator():
+# ══════════════════════════════════════════════════════════════════
+#  RUN ALL + ANALYSIS
+# ══════════════════════════════════════════════════════════════════
+
+def run_all_scanners(pdf_mod=None) -> Tuple[List[dict], Dict[str, dict]]:
+    """Run all five scanners; return (reports_list, reports_dict)."""
+    reports_list: List[dict] = []
+    reports_dict: Dict[str, dict] = {}
+    for _, _, key in MENU_ITEMS:
+        if key not in RUNNER_MAP:
+            continue
+        _separator()
+        print(cc(MA + B, f"\n  ▸  Running {key.upper()} scanner …\n"))
+        r = RUNNER_MAP[key](None)   # PDF generated later if needed
+        reports_list.append(r)
+        if r:
+            reports_dict[key] = r
+    return reports_list, reports_dict
+
+
+def run_all_plus(pdf_mod=None) -> dict:
+    """Run all scanners then Attack Chain → Risk Scoring → Remediation → PDF."""
+    ac_mod  = _load_attack_chain()
+    rs_mod  = _load_risk_scoring()
+    rem_mod = _load_remediation()
+
+    reports_list, reports_dict = run_all_scanners(pdf_mod=None)
+    _separator()
+
+    # ── Context-Aware Risk Scoring ─────────────────────────────
+    scored_reports = reports_dict
+    if rs_mod and reports_dict:
+        print(cc(CY + B, "\n  ▸  Context-Aware Risk Scoring …\n"))
+        rs_mod.print_banner()
+        factors = rs_mod.collect_context()
+        rs_mod.print_context_factors(factors)
+        scored_reports = rs_mod.score_all_reports(reports_dict)
+        rs_mod.print_top_findings(scored_reports, top_n=10)
+        rs_mod.print_summary(scored_reports)
+        _separator()
+
+    # ── Attack Chain Analysis ──────────────────────────────────
+    chains = []
+    if ac_mod and reports_dict:
+        print(cc(CY + B, "\n  ▸  Attack Chain Analysis …\n"))
+        ac_mod.print_banner()
+        mem = ac_mod.check_memory_protections()
+        ac_mod.print_mem_protections(mem)
+        chains = ac_mod.build_chains(scored_reports)
+        ac_mod.print_chains(chains)
+        ac_mod.print_summary(chains)
+        _separator()
+
+    # ── Remediation Roadmap ────────────────────────────────────
+    actions = []
+    if rem_mod and reports_dict:
+        print(cc(CY + B, "\n  ▸  Remediation Roadmap …\n"))
+        rem_mod.print_banner()
+        actions = rem_mod.build_roadmap(scored_reports, chains)
+        rem_mod.print_roadmap(actions)
+        rem_mod.print_summary(actions, chains)
+        _separator()
+
+    # ── Build combined report ──────────────────────────────────
+    combined = _merge_reports(reports_list)
+    if ac_mod and chains:
+        combined["attack_chains"] = ac_mod.chains_to_report_dict(chains)
+    if rem_mod and actions:
+        combined["remediation_roadmap"] = rem_mod.roadmap_to_report_dict(actions)
+    if rs_mod and "_context_factors" in scored_reports:
+        combined["context_factors"] = {
+            k: {"active": v.get("active"), "weight": v.get("weight"), "label_th": v.get("label_th", "")}
+            for k, v in scored_reports["_context_factors"].items()
+        }
+
+    if pdf_mod and any(reports_list):
+        print(cc(CY + B, "\n  ▸  Generating combined PDF report …"))
+        _generate_pdf(pdf_mod, combined, "cosvinte_full")
+
+    print(cc(GR + B, "\n  ✔  Full analysis complete.\n"))
+    return combined
+
+
+# ══════════════════════════════════════════════════════════════════
+#  INTERACTIVE MENU
+# ══════════════════════════════════════════════════════════════════
+
+def _separator() -> None:
     _separator_fn()
 
-def _menu_header():
+
+def _print_menu() -> None:
     print(f"\n{CY}{B}  ╔══ SCANNER MENU ══════════════════════════════════════╗{R}")
     for num, label, _ in MENU_ITEMS:
         col  = CY if num not in ("0",) else GY
-        icon = "●" if num not in ("0","6","7") else ("◆◆" if num == "7" else ("◆" if num == "6" else "✖"))
-        print(f"  {cc(GY,chr(8214))}  {cc(col,icon)} {cc(WH, num)}  {cc(col if num!='0' else GY, label)}")
+        icon = ("●" if num not in ("0", "6", "7")
+                else ("◆◆" if num == "7" else ("◆" if num == "6" else "✖")))
+        print(f"  {cc(GY, chr(8214))}  {cc(col, icon)} {cc(WH, num)}  {cc(col if num != '0' else GY, label)}")
     print(f"{CY}{B}  ╚═══════════════════════════════════════════════════════╝{R}\n")
 
-def _pdf_prompt():
+
+def _ask_pdf(pdf_mod) -> bool:
+    """Prompt the user for PDF generation; returns False if pdf_mod is None."""
+    if not pdf_mod:
+        return False
+    import sys as _sys
+    if not _sys.stdin.isatty():
+        return True  # non-interactive (Docker / pipe) → always generate PDF
     ans = input(cc(CY, "\n  Generate PDF report? [Y/n]: ")).strip().lower()
     return ans not in ("n", "no")
 
-def interactive_menu():
+
+def interactive_menu() -> None:
     print(BANNER)
+    if not _health_check():
+        sys.exit(1)
+
     pdf_mod = _load_pdf()
 
     while True:
-        _menu_header()
-        choice = input(cc(CY+B, "  Select scanner [0-6]: ")).strip()
+        _print_menu()
+        choice = input(cc(CY + B, "  Select scanner [0-7]: ")).strip()
 
         if choice == "0":
             print(cc(GY, "\n  Goodbye.\n"))
             sys.exit(0)
 
         if choice == "7":
-            want_pdf = _pdf_prompt() if pdf_mod else False
+            want_pdf = _ask_pdf(pdf_mod)
             _separator()
             run_all_plus(pdf_mod if want_pdf else None)
             continue
 
         if choice == "6":
-            want_pdf = _pdf_prompt() if pdf_mod else False
-            reports  = []
-            for _, _, key in MENU_ITEMS:
-                if key in RUNNER_MAP:
-                    _separator()
-                    print(cc(MA+B, f"\n  ▸  Running {key.upper()} scanner ...\n"))
-                    r = RUNNER_MAP[key](pdf_mod if want_pdf else None)
-                    reports.append(r)
-            if want_pdf and pdf_mod and any(reports):
+            want_pdf  = _ask_pdf(pdf_mod)
+            reports_list, _ = run_all_scanners(pdf_mod=None)
+            if want_pdf and pdf_mod and any(reports_list):
                 _separator()
-                print(cc(CY+B, "\n  ▸  Generating combined PDF report ..."))
-                combined = _combined_report(reports)
-                _generate_pdf(pdf_mod, combined, "cosvinte_combined")
+                _build_combined_pdf(pdf_mod, reports_list, "cosvinte_combined")
             continue
 
         key_map = {num: key for num, _, key in MENU_ITEMS}
-        key = key_map.get(choice)
+        key     = key_map.get(choice)
         if key not in RUNNER_MAP:
-            print(cc(YE, "  Invalid choice.\n"))
+            print(cc(YE, "  Invalid choice. Please enter a number from 0 to 7.\n"))
             continue
 
-        want_pdf = _pdf_prompt() if pdf_mod else False
+        want_pdf = _ask_pdf(pdf_mod)
         _separator()
         RUNNER_MAP[key](pdf_mod if want_pdf else None)
 
 
-# ─────────────────────────────────────────────────────
-# ══════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════
 #  CLI ENTRY POINT
-# ══════════════════════════════════════════════════════
-# ─────────────────────────────────────────────────────
-def main():
+# ══════════════════════════════════════════════════════════════════
+
+def main() -> None:
     ap = argparse.ArgumentParser(
         prog="cosvinte",
         description="COSVINTE — Unified Linux Privilege-Escalation Scanner",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog="""\
 Examples:
   python3 cosvinte.py                   # interactive menu
-  python3 cosvinte.py --caps            # capabilities scan + PDF
+  python3 cosvinte.py --caps            # capabilities scan
   python3 cosvinte.py --kernel --no-pdf # kernel scan, no PDF
-  python3 cosvinte.py --all             # run all 5 scanners + PDF
-  python3 cosvinte.py --all --no-pdf    # run all, JSON only
-        """
+  python3 cosvinte.py --all             # run all 5 scanners + combined PDF
+  python3 cosvinte.py --analyze         # run all + attack chain + remediation
+  python3 cosvinte.py --all --no-pdf    # run all, skip PDF
+        """,
     )
     ap.add_argument("--caps",     action="store_true", help="Run capability scanner")
     ap.add_argument("--cron",     action="store_true", help="Run cron CVE scanner")
     ap.add_argument("--kernel",   action="store_true", help="Run kernel CVE scanner")
     ap.add_argument("--path",     action="store_true", help="Run PATH hijack scanner")
     ap.add_argument("--writable", action="store_true", help="Run writable path scanner")
-    ap.add_argument("--all",      action="store_true", help="Run all scanners")
-    ap.add_argument("--analyze",  action="store_true", help="Run all + Attack Chain + Risk Scoring + Remediation")
+    ap.add_argument("--all",      action="store_true", help="Run all five scanners")
+    ap.add_argument("--analyze",  action="store_true",
+                    help="Run all scanners + Attack Chain + Risk Scoring + Remediation")
     ap.add_argument("--no-pdf",   action="store_true", help="Skip PDF generation")
-    ap.add_argument("--pdf",      action="store_true", help="Force PDF generation (default on)")
+    ap.add_argument("--pdf",      action="store_true", help="Force PDF generation (default: on)")
     args = ap.parse_args()
 
-    # No flags → interactive
-    flags = [args.caps, args.cron, args.kernel, args.path, args.writable, args.all, args.analyze]
-    if not any(flags):
+    # No flags → interactive mode
+    cli_flags = [args.caps, args.cron, args.kernel, args.path,
+                 args.writable, args.all, args.analyze]
+    if not any(cli_flags):
         interactive_menu()
         return
 
+    # Health check before any scan
+    if not _health_check():
+        sys.exit(1)
+
+    print(BANNER)
+    pdf_mod  = None if args.no_pdf else _load_pdf()
+    want_pdf = pdf_mod is not None
+
     if args.analyze:
-        print(BANNER)
-        pdf_mod = None if args.no_pdf else _load_pdf()
         run_all_plus(pdf_mod)
         return
 
-    print(BANNER)
-    pdf_mod   = None if args.no_pdf else _load_pdf()
-    want_pdf  = (pdf_mod is not None)
-
-    to_run = []
+    # Determine which scanners to run
     if args.all:
         to_run = list(RUNNER_MAP.keys())
     else:
+        to_run = []
         if args.caps:     to_run.append("caps")
         if args.cron:     to_run.append("cron")
         if args.kernel:   to_run.append("kernel")
         if args.path:     to_run.append("path")
         if args.writable: to_run.append("writable")
 
-    reports = []
+    # Single scanner → PDF inline; multiple → combined PDF at end
+    single = len(to_run) == 1
+    reports: list = []
     for key in to_run:
         _separator()
-        print(cc(MA+B, f"\n  ▸  {key.upper()} SCANNER\n"))
-        r = RUNNER_MAP[key](pdf_mod if (want_pdf and len(to_run) == 1) else None)
+        print(cc(MA + B, f"\n  ▸  {key.upper()} SCANNER\n"))
+        r = RUNNER_MAP[key](pdf_mod if (want_pdf and single) else None)
         reports.append(r)
 
-    # For multi-scanner runs generate a combined PDF at the end
-    if want_pdf and len(to_run) > 1 and pdf_mod and any(reports):
+    if want_pdf and not single and pdf_mod and any(reports):
         _separator()
-        print(cc(CY+B, "\n  ▸  Generating combined PDF report …"))
-        combined = _combined_report(reports)
-        ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-        reports_dir = os.path.join(_HERE, "reports")
-        os.makedirs(reports_dir, exist_ok=True)
-        pdf_path = os.path.join(reports_dir, f"cosvinte_combined_{ts}.pdf")
-        out  = pdf_mod.generate_pdf(combined, pdf_path)
-        print(cc(GR, f"  ✔  Combined PDF → {cc(WH+B, out)}\n"))
+        _build_combined_pdf(pdf_mod, reports, "cosvinte_combined")
 
     _separator()
-    print(cc(GR+B, "\n  ✔  All scans complete.\n"))
+    print(cc(GR + B, "\n  ✔  All scans complete.\n"))
 
 
 if __name__ == "__main__":

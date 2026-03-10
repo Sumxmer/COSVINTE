@@ -273,9 +273,12 @@ CVE_DB = [
 # ==============================
 def match_version(current, rule):
     import re as _re
-    # <999.0 is used as "always vulnerable" sentinel
+    # <999.0 was a legacy "always flag" sentinel — now we require
+    # actual runtime evidence from the check_map instead of auto-flagging.
+    # Returning True here means the VERSION matches; the check_map condition
+    # still must pass before a finding is recorded.
     if rule in ("<999.0", "<=999.0"):
-        return True
+        return True   # version matches; runtime check still required
     try:
         if rule.startswith("<="):
             return version.parse(current) < version.parse(rule[2:]) or                    version.parse(current) == version.parse(rule[2:])
@@ -497,6 +500,41 @@ def detect_cron():
 # ==============================
 # Run Scan
 # ==============================
+
+def _cron_is_running(cron_type: str) -> bool:
+    """Return True only if the named cron daemon appears active via systemctl/ps."""
+    service_names = {
+        "cronie":     ["crond", "cron"],
+        "debian cron": ["cron"],
+        "vixie":      ["cron", "vixie-cron"],
+        "dcron":      ["dcron", "crond"],
+    }
+    candidates = service_names.get(cron_type.lower(), ["cron", "crond"])
+
+    # Check systemctl
+    for svc in candidates:
+        try:
+            r = subprocess.run(
+                ["systemctl", "is-active", svc],
+                capture_output=True, text=True, timeout=2
+            )
+            if r.stdout.strip() == "active":
+                return True
+        except Exception:
+            pass
+
+    # Fallback: check ps
+    try:
+        r = subprocess.run(["pgrep", "-x", "cron", "crond"],
+                           capture_output=True, text=True, timeout=2)
+        if r.returncode == 0:
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
 def run_scan(cron_type, cron_version, base_path="/"):
     findings = []
 
@@ -516,7 +554,8 @@ def run_scan(cron_type, cron_version, base_path="/"):
         "cron_env_injection": (env_vuln,    {"paths": env_paths}),
         "crontab_sudo_all":   (sudo_vuln,   {"lines": sudo_paths}),
         "cron_script_writable":(script_vuln, {"paths": script_paths}),
-        "version_only":       (True,        {}),
+        # version_only: only flag if cron daemon is actually running
+        "version_only": (_cron_is_running(cron_type), {}),
     }
 
     cron_type_lower = cron_type.lower()
@@ -695,18 +734,6 @@ def print_summary(cron_type, cron_version, findings, checks):
     print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Overall Risk Score :')} {severity_badge(sev(max_cvss))}  {c(Color.GRAY,'CVSS')} {c(Color.BOLD, f'{max_cvss:.1f}')}")
     print(c(Color.CYAN + Color.BOLD, '  ╚═══════════════════════════════════════════════════════════╝\n'))
 
-def get_distro():
-    try:
-        r = subprocess.run(["lsb_release", "-d"], capture_output=True, text=True)
-        return r.stdout.replace("Description:", "").strip()
-    except:
-        try:
-            with open("/etc/os-release") as f:
-                for line in f:
-                    if line.startswith("PRETTY_NAME"):
-                        return line.split("=")[1].strip().strip('"')
-        except:
-            return "Unknown"
 
 # ==============================
 # Save Report

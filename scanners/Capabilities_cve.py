@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""
- ██████╗ ██████╗ ███████╗██╗   ██╗██╗███╗   ██╗████████╗███████╗
-██╔════╝██╔═══██╗██╔════╝██║   ██║██║████╗  ██║╚══██╔══╝██╔════╝
-██║     ██║   ██║███████╗██║   ██║██║██╔██╗ ██║   ██║   █████╗
-██║     ██║   ██║╚════██║╚██╗ ██╔╝██║██║╚██╗██║   ██║   ██╔══╝
-╚██████╗╚██████╔╝███████║ ╚████╔╝ ██║██║ ╚████║   ██║   ███████╗
- ╚═════╝ ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝
-
-  COSVINTE — Linux Capability Scanner  |  "Conquer Vulnerabilities"
-"""
 
 import os
 import json
@@ -27,6 +17,7 @@ from core.utils import (
 # Capability Risk Database
 # Full description + CVE mapping + exploit notes
 # ==============================
+# 15 vulnerable capabilities 
 CAP_DB = {
     "cap_sys_admin": {
         "severity": "CRITICAL",
@@ -359,6 +350,27 @@ def parse_cap_line(line):
 
     return path, cap_str, cap_types if cap_types else ["permitted"]
 
+
+def min_severity(a: str, b: str) -> str:
+    """Return the less severe of two severity strings."""
+    order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+    return a if order.get(a, 9) >= order.get(b, 9) else b
+
+def _wsl_detected() -> bool:
+    try:
+        with open("/proc/version") as fh:
+            return "microsoft" in fh.read().lower()
+    except Exception:
+        return False
+
+
+# Capabilities that are HIGH severity on bare metal but LOW on WSL
+_WSL_REDUCED_CAPS = {"cap_net_admin", "cap_net_raw", "cap_net_bind_service"}
+
+# Capabilities that require exploitable conditions beyond just existing
+_REQUIRES_WRITABLE_PATH = {"cap_dac_override", "cap_dac_read_search"}
+
+
 def analyze_capabilities(lines):
     findings = []
     seen = set()
@@ -431,7 +443,36 @@ def analyze_capabilities(lines):
             })
 
     findings.sort(key=lambda x: x["risk_score"], reverse=True)
-    return findings
+    # ── Post-process: reduce false positives ─────────────────────
+    wsl = _wsl_detected()
+    refined = []
+    for f in findings:
+        cap = f.get("capability", "").lower()
+
+        # On WSL, network capabilities can't reach the real network stack
+        if wsl and any(c in cap for c in _WSL_REDUCED_CAPS):
+            f["severity"]      = "LOW"
+            f["risk_score"]    = min(f.get("risk_score", 5.0), 3.0)
+            f["false_positive_note"] = (
+                "WSL environment detected — network capabilities have limited "
+                "exploitability because WSL2 networking is NATed through Windows."
+            )
+
+        # cap_dac_override only matters if a writable sensitive path exists
+        if any(c in cap for c in _REQUIRES_WRITABLE_PATH):
+            import os as _os
+            sensitive = ["/etc/passwd", "/etc/shadow", "/etc/sudoers"]
+            if not any(_os.access(p, _os.W_OK) for p in sensitive):
+                f["false_positive_note"] = (
+                    "cap_dac_override is present but no sensitive file "
+                    "(/etc/passwd, /etc/shadow, /etc/sudoers) is currently "
+                    "writable — exploitation requires additional conditions."
+                )
+                f["severity"]   = min_severity(f.get("severity", "HIGH"), "MEDIUM")
+                f["risk_score"] = min(f.get("risk_score", 7.0), 5.0)
+
+        refined.append(f)
+    return refined
 
 # ==============================
 # Simulate Lab Environment

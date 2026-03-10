@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
- COSVINTE — Context-Aware Risk Scoring
- CVSS score environment scan
- base score context 
+  COSVINTE — Context-Aware Risk Scoring
+
+  Adjusts raw CVSS scores based on the real environment:
+  ASLR, sudo access, MAC enforcement, dangerous group memberships,
+  writable sensitive files, container presence, ptrace scope, and core dumps.
 """
 
 import os
 import pwd
 import subprocess
 import platform
-from datetime import datetime
 
 from core.utils import (
     Color, c, severity_badge,
@@ -17,177 +18,212 @@ from core.utils import (
     print_banner as _print_banner,
 )
 
-# ==============================
-# Context Factor Definitions
-# factor weight 
-# ==============================
+
+# ══════════════════════════════════════════════════════════════════
+#  INDIVIDUAL CONTEXT CHECKS
+#  Each returns a factor dict:
+#    active  – bool: whether this factor affects the score
+#    weight  – float: score delta (positive = more dangerous)
+#    label   – English description
+# ══════════════════════════════════════════════════════════════════
 
 def _check_aslr() -> dict:
-    """ASLR disabled = kernel/heap exploits become significantly easier."""
+    """ASLR disabled → kernel/heap exploits become significantly easier."""
     try:
-        with open("/proc/sys/kernel/randomize_va_space") as f:
-            val = int(f.read().strip())
+        with open("/proc/sys/kernel/randomize_va_space") as fh:
+            val = int(fh.read().strip())
         if val == 0:
-            return {"active": True,  "weight": +1.5, "label": "ASLR disabled (randomize_va_space=0)",    "label_th": "ASLR exploit "}
+            return {"active": True,  "weight": +1.5,
+                    "label": "ASLR disabled (randomize_va_space=0) — exploits much easier"}
         if val == 1:
-            return {"active": True,  "weight": +0.5, "label": "ASLR partial (randomize_va_space=1)",     "label_th": "ASLR "}
-        return     {"active": False, "weight":  0.0, "label": "ASLR fully enabled",                      "label_th": "ASLR "}
+            return {"active": True,  "weight": +0.5,
+                    "label": "ASLR partial (randomize_va_space=1) — partially effective"}
+        return     {"active": False, "weight":  0.0,
+                    "label": "ASLR fully enabled (randomize_va_space=2)"}
     except Exception:
-        return     {"active": False, "weight": +0.3, "label": "ASLR status unknown",                     "label_th": " ASLR"}
+        return     {"active": False, "weight": +0.3,
+                    "label": "ASLR status unknown"}
+
 
 def _check_user_in_sudo() -> dict:
-    """user sudo = privesc """
+    """Unrestricted sudo → privilege escalation is trivial once code runs."""
     try:
-        r = subprocess.run(["sudo", "-n", "-l"], capture_output=True, text=True, timeout=3)
+        r = subprocess.run(
+            ["sudo", "-n", "-l"], capture_output=True, text=True, timeout=3
+        )
         if r.returncode == 0 and "(ALL)" in r.stdout:
-            return {"active": True,  "weight": +1.5, "label": "Current user has unrestricted sudo",      "label_th": "user sudo (ALL)"}
+            return {"active": True,  "weight": +1.5,
+                    "label": "Current user has unrestricted sudo (ALL)"}
         if r.returncode == 0 and r.stdout.strip():
-            return {"active": True,  "weight": +0.8, "label": "Current user has limited sudo access",    "label_th": "user sudo "}
+            return {"active": True,  "weight": +0.8,
+                    "label": "Current user has limited sudo access"}
     except Exception:
         pass
-    return         {"active": False, "weight":  0.0, "label": "No sudo access detected",                 "label_th": " sudo"}
+    return         {"active": False, "weight":  0.0,
+                    "label": "No sudo access detected"}
+
 
 def _check_selinux_apparmor() -> dict:
-    """SELinux/AppArmor enforcing = exploit """
-    # SELinux
+    """SELinux/AppArmor enforcing reduces exploit reliability."""
     try:
         r = subprocess.run(["getenforce"], capture_output=True, text=True, timeout=2)
         if "Enforcing" in r.stdout:
-            return {"active": True,  "weight": -1.0, "label": "SELinux Enforcing",                       "label_th": "SELinux Enforcing "}
+            return {"active": True,  "weight": -1.0,
+                    "label": "SELinux Enforcing — exploits harder to land"}
         if "Permissive" in r.stdout:
-            return {"active": True,  "weight": -0.3, "label": "SELinux Permissive (log only)",           "label_th": "SELinux Permissive ( log block)"}
+            return {"active": True,  "weight": -0.3,
+                    "label": "SELinux Permissive (logs only, does not block)"}
     except Exception:
         pass
-    # AppArmor
     try:
         r = subprocess.run(["aa-status", "--enabled"], capture_output=True, timeout=2)
         if r.returncode == 0:
-            return {"active": True,  "weight": -0.8, "label": "AppArmor enabled",                        "label_th": "AppArmor "}
+            return {"active": True,  "weight": -0.8,
+                    "label": "AppArmor enabled"}
     except Exception:
         pass
-    return         {"active": True,  "weight": +0.5, "label": "No MAC (SELinux/AppArmor) detected",      "label_th": " SELinux/AppArmor "}
+    return         {"active": True,  "weight": +0.5,
+                    "label": "No MAC framework (SELinux/AppArmor) detected"}
+
 
 def _check_dangerous_groups() -> dict:
-    """user group docker/lxd/disk/sudo = escalate """
+    """Membership in docker/lxd/disk/shadow etc. enables escalation."""
     danger_groups = ["docker", "lxd", "disk", "shadow", "sudo", "wheel", "adm"]
     try:
         import grp
-        user_name = os.environ.get('USER') or pwd.getpwuid(os.getuid()).pw_name
+        user_name   = os.environ.get("USER") or pwd.getpwuid(os.getuid()).pw_name
         user_groups = [g.gr_name for g in grp.getgrall() if user_name in g.gr_mem]
-        found = [g for g in user_groups if g in danger_groups]
+        found       = [g for g in user_groups if g in danger_groups]
         if found:
-            return {"active": True,  "weight": +1.2, "label": f"User in dangerous groups: {', '.join(found)}", "label_th": f"user group : {', '.join(found)}"}
+            return {"active": True,  "weight": +1.2,
+                    "label": f"User is in dangerous group(s): {', '.join(found)}"}
     except Exception:
         pass
-    return         {"active": False, "weight":  0.0, "label": "No dangerous group membership",           "label_th": " group "}
+    return         {"active": False, "weight":  0.0,
+                    "label": "No dangerous group memberships detected"}
+
 
 def _check_writable_sensitive() -> dict:
-    """ sensitive = critical """
+    """Writable /etc/passwd or /etc/shadow → instant root."""
     sensitive = ["/etc/passwd", "/etc/shadow", "/etc/sudoers", "/etc/crontab"]
-    found = []
-    for path in sensitive:
-        try:
-            if os.access(path, os.W_OK):
-                found.append(path)
-        except Exception:
-            pass
+    found     = [p for p in sensitive if os.access(p, os.W_OK)]
     if found:
-        return {"active": True,  "weight": +2.0, "label": f"Sensitive files writable: {', '.join(found)}", "label_th": f": {', '.join(found)}"}
-    return     {"active": False, "weight":  0.0, "label": "No sensitive files are writable",             "label_th": ""}
+        return {"active": True,  "weight": +2.0,
+                "label": f"Sensitive files are writable: {', '.join(found)}"}
+    return     {"active": False, "weight":  0.0,
+                "label": "No sensitive files are writable"}
+
 
 def _check_container() -> dict:
-    """ container = escape risk"""
-    indicators = [
-        "/.dockerenv",
-        "/run/.containerenv",
-    ]
-    for ind in indicators:
-        if os.path.exists(ind):
-            return {"active": True, "weight": +0.5, "label": "Running inside container (docker/podman)", "label_th": " container container escape"}
+    """Running inside a container adds escape-based risk."""
+    for indicator in ("/.dockerenv", "/run/.containerenv"):
+        if os.path.exists(indicator):
+            return {"active": True, "weight": +0.5,
+                    "label": "Running inside container (docker/podman) — escape risk elevated"}
     try:
-        with open("/proc/1/cgroup") as f:
-            if "docker" in f.read() or "lxc" in f.read():
-                return {"active": True, "weight": +0.5, "label": "Container environment detected via cgroup", "label_th": " container environment cgroup"}
+        with open("/proc/1/cgroup") as fh:
+            content = fh.read()
+        if "docker" in content or "lxc" in content:
+            return {"active": True, "weight": +0.5,
+                    "label": "Container environment detected via cgroup"}
     except Exception:
         pass
-    return {"active": False, "weight": 0.0, "label": "Not in container", "label_th": " container"}
+    return {"active": False, "weight": 0.0,
+            "label": "Not running inside a container"}
+
 
 def _check_ptrace_scope() -> dict:
-    """ptrace_scope=0 = process injection """
+    """ptrace_scope=0 → unrestricted process injection."""
     try:
-        with open("/proc/sys/kernel/yama/ptrace_scope") as f:
-            val = int(f.read().strip())
+        with open("/proc/sys/kernel/yama/ptrace_scope") as fh:
+            val = int(fh.read().strip())
         if val == 0:
-            return {"active": True,  "weight": +0.8, "label": "ptrace_scope=0 (unrestricted process tracing)", "label_th": "ptrace inject code process "}
-        if val == 1:
-            return {"active": False, "weight":  0.0, "label": "ptrace_scope=1 (restricted to parent)", "label_th": "ptrace parent process"}
+            return {"active": True,  "weight": +0.8,
+                    "label": "ptrace_scope=0 — unrestricted process tracing enabled"}
+        return     {"active": False, "weight":  0.0,
+                    "label": f"ptrace_scope={val} — restricted process tracing"}
     except Exception:
-        pass
-    return     {"active": False, "weight":  0.0, "label": "ptrace_scope unknown",                    "label_th": " ptrace_scope"}
+        return     {"active": False, "weight":  0.0,
+                    "label": "ptrace_scope unknown (Yama LSM likely absent)"}
+
 
 def _check_core_dumps() -> dict:
-    """core dump enabled + readable = leak memory"""
+    """Enabled core dumps can leak sensitive memory content."""
     try:
-        r = subprocess.run(["ulimit", "-c"], capture_output=True, text=True, shell=True, timeout=2)
-        if r.stdout.strip() != "0":
-            return {"active": True,  "weight": +0.3, "label": "Core dumps enabled (potential memory leak)", "label_th": "Core dump leak sensitive memory"}
+        r = subprocess.run(
+            "ulimit -c", capture_output=True, text=True, shell=True, timeout=2
+        )
+        if r.stdout.strip() not in ("0", ""):
+            return {"active": True,  "weight": +0.3,
+                    "label": "Core dumps enabled — potential memory disclosure"}
     except Exception:
         pass
-    return     {"active": False, "weight":  0.0, "label": "Core dumps disabled",                     "label_th": "Core dump "}
+    return         {"active": False, "weight":  0.0,
+                    "label": "Core dumps disabled"}
 
-# ==============================
-# Context Collector
-# ==============================
+
+# ══════════════════════════════════════════════════════════════════
+#  CONTEXT COLLECTOR
+# ══════════════════════════════════════════════════════════════════
+
 def collect_context() -> dict:
-    """ context factors environment"""
-    factors = {
-        "aslr":              _check_aslr(),
-        "sudo_access":       _check_user_in_sudo(),
-        "mac_enforcement":   _check_selinux_apparmor(),
-        "dangerous_groups":  _check_dangerous_groups(),
+    """Run all context checks and return a combined factors dict."""
+    return {
+        "aslr":               _check_aslr(),
+        "sudo_access":        _check_user_in_sudo(),
+        "mac_enforcement":    _check_selinux_apparmor(),
+        "dangerous_groups":   _check_dangerous_groups(),
         "writable_sensitive": _check_writable_sensitive(),
-        "container":         _check_container(),
-        "ptrace_scope":      _check_ptrace_scope(),
-        "core_dumps":        _check_core_dumps(),
+        "container":          _check_container(),
+        "ptrace_scope":       _check_ptrace_scope(),
+        "core_dumps":         _check_core_dumps(),
     }
-    return factors
+
 
 def total_weight(factors: dict) -> float:
+    """Sum all active factor weights."""
     return sum(f["weight"] for f in factors.values() if f.get("active", False))
 
-# ==============================
-# Score Adjuster
-# ==============================
+
+# ══════════════════════════════════════════════════════════════════
+#  SCORE ADJUSTER
+# ══════════════════════════════════════════════════════════════════
+
 def adjust_score(base_score: float, factors: dict, finding_type: str = "general") -> dict:
+    """Adjust a base CVSS score using the environment context factors.
+
+    Args:
+        base_score:   Raw CVSS score (0.0–10.0).
+        factors:      Result of collect_context().
+        finding_type: One of 'caps', 'kernel', 'general'.
+
+    Returns:
+        Dict with adjusted_score, delta, severity_base, severity_adj,
+        and a list of active_factors that contributed.
     """
- base CVSS score context 
- dict adjusted_score, delta, active_factors
- """
-    delta = 0.0
+    delta  = 0.0
     active = []
 
     for factor_key, factor in factors.items():
         if not factor.get("active"):
             continue
-
         w = factor["weight"]
 
-        # factor finding type 
+        # Skip ASLR adjustment for non-kernel/heap findings
         if factor_key == "aslr" and finding_type not in ("kernel", "heap", "general"):
             continue
+        # Skip container adjustment for non-capability findings
         if factor_key == "container" and finding_type not in ("caps", "general"):
             continue
 
         delta += w
         active.append({
-            "key":      factor_key,
-            "label":    factor["label"],
-            "label_th": factor["label_th"],
-            "weight":   w,
+            "key":    factor_key,
+            "label":  factor["label"],
+            "weight": w,
         })
 
     adjusted = round(min(max(base_score + delta, 0.0), 10.0), 1)
-
     return {
         "base_score":     base_score,
         "adjusted_score": adjusted,
@@ -198,14 +234,13 @@ def adjust_score(base_score: float, factors: dict, finding_type: str = "general"
         "finding_type":   finding_type,
     }
 
-# ==============================
-# Batch Scoring ( findings list)
-# ==============================
+
+# ══════════════════════════════════════════════════════════════════
+#  BATCH SCORING
+# ══════════════════════════════════════════════════════════════════
+
 def score_findings(findings: list, finding_type: str, factors: dict) -> list:
-    """
- findings list scanner 
- findings adjusted_score 
- """
+    """Enrich each finding with context_scoring; sort by adjusted score (desc)."""
     result = []
     for f in findings:
         base = float(f.get("cvss") or f.get("risk_score") or f.get("base_score") or 0.0)
@@ -213,17 +248,20 @@ def score_findings(findings: list, finding_type: str, factors: dict) -> list:
         enriched = dict(f)
         enriched["context_scoring"] = adj
         result.append(enriched)
-    # adjusted score
     result.sort(key=lambda x: x["context_scoring"]["adjusted_score"], reverse=True)
     return result
 
+
 def score_all_reports(reports: dict) -> dict:
+    """Apply context scoring across all scanner reports.
+
+    Collects context ONCE and reuses it — avoids repeated subprocess calls.
+
+    Returns:
+        Enriched reports dict plus a '_context_factors' key.
     """
- reports dict all scanners
- dict finding context_scoring 
- """
+    # Collect context a single time for the entire run
     factors = collect_context()
-    scored  = {}
 
     type_map = {
         "caps":     "caps",
@@ -233,6 +271,7 @@ def score_all_reports(reports: dict) -> dict:
         "writable": "general",
     }
 
+    scored: dict = {}
     for key, report in reports.items():
         if not report:
             scored[key] = report
@@ -243,17 +282,15 @@ def score_all_reports(reports: dict) -> dict:
 
         if "findings" in report:
             new_rep["findings"] = score_findings(report["findings"], ftype, factors)
-
-        # scanner key 
         if "writable_paths" in report:
             new_rep["writable_paths"] = score_findings(report["writable_paths"], ftype, factors)
         if "path_analysis" in report:
             new_rep["path_analysis"] = score_findings(report["path_analysis"], ftype, factors)
 
-        # overall score summary 
+        # Adjust overall summary score
         if "summary" in new_rep:
             old_overall = float(new_rep["summary"].get("overall_cvss", 0))
-            new_overall = round(min(max(old_overall + total_weight(factors), 0), 10), 1)
+            new_overall = round(min(max(old_overall + total_weight(factors), 0.0), 10.0), 1)
             new_rep["summary"]["overall_cvss_base"]     = old_overall
             new_rep["summary"]["overall_cvss_adjusted"] = new_overall
             new_rep["summary"]["overall_cvss"]          = new_overall
@@ -264,61 +301,48 @@ def score_all_reports(reports: dict) -> dict:
     scored["_context_factors"] = factors
     return scored
 
-# ==============================
-# Pretty Printing
-# ==============================
-def print_banner():
+
+# ══════════════════════════════════════════════════════════════════
+#  PRETTY PRINTING
+# ══════════════════════════════════════════════════════════════════
+
+def print_banner() -> None:
     _print_banner('Context-Aware Risk Scoring  |  "Conquer Vulnerabilities"')
 
-def print_context_factors(factors: dict):
-    print(c(Color.CYAN + Color.BOLD, "  ╔══ ENVIRONMENT CONTEXT FACTORS ════════════════════════════╗"))
-    print(f" {c(Color.CYAN,'║')} {c(Color.GRAY,' CVSS score environment ')}")
+
+def print_context_factors(factors: dict) -> None:
+    tw     = total_weight(factors)
+    tw_col = Color.RED if tw > 0 else (Color.GREEN if tw < 0 else Color.GRAY)
+
+    print(c(Color.CYAN + Color.BOLD,
+            "  ╔══ ENVIRONMENT CONTEXT FACTORS ════════════════════════════╗"))
+    print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY, 'Each active factor adjusts all CVSS scores for this run.')}")
     print(f"  {c(Color.CYAN,'║')}")
 
-    for key, factor in factors.items():
+    for factor in factors.values():
         active = factor.get("active", False)
         weight = factor.get("weight", 0.0)
-        label  = factor.get("label_th", factor.get("label", key))
+        label  = factor.get("label", "")
 
         if active and weight > 0:
-            icon = c(Color.RED + Color.BOLD,    f"  ✖  [{'+' if weight > 0 else ''}{weight:.1f}]")
+            icon = c(Color.RED + Color.BOLD,   f"  ✖  [{'+' if weight > 0 else ''}{weight:.1f}]")
         elif active and weight < 0:
-            icon = c(Color.GREEN + Color.BOLD,  f"  ✔  [{weight:.1f}]  ")
+            icon = c(Color.GREEN + Color.BOLD, f"  ✔  [{weight:.1f}]  ")
         else:
-            icon = c(Color.GRAY,                f"  ─  [  0.0]")
+            icon = c(Color.GRAY,               f"  ─  [  0.0]")
 
         print(f"  {c(Color.CYAN,'║')} {icon} {c(Color.WHITE if active else Color.GRAY, label)}")
 
-    tw = total_weight(factors)
-    tw_col = Color.RED if tw > 0 else (Color.GREEN if tw < 0 else Color.GRAY)
     print(f"  {c(Color.CYAN,'║')}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Net Score Adjustment :')} {c(tw_col + Color.BOLD, f'{tw:+.1f}')}")
-    print(c(Color.CYAN + Color.BOLD, "  ╚════════════════════════════════════════════════════════════╝\n"))
+    print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY, 'Net Score Adjustment :')} "
+          f"{c(tw_col + Color.BOLD, f'{tw:+.1f}')}")
+    print(c(Color.CYAN + Color.BOLD,
+            "  ╚════════════════════════════════════════════════════════════╝\n"))
 
-def print_adjusted_finding(finding: dict, idx: int):
-    """ finding context scoring"""
-    cs   = finding.get("context_scoring", {})
-    base = cs.get("base_score", 0)
-    adj  = cs.get("adjusted_score", base)
-    sev  = cs.get("severity_adj", "UNKNOWN")
-    delta = cs.get("delta", 0)
-    delta_col = Color.RED if delta > 0 else (Color.GREEN if delta < 0 else Color.GRAY)
 
-    name = (finding.get("name") or finding.get("cve") or
-            finding.get("binary") or finding.get("path") or f"Finding #{idx}")
-
-    print(f"\n  {c(Color.WHITE + Color.BOLD, f'{idx}.')} {c(Color.MAGENTA, str(name))}  {severity_badge(sev)}")
-    print(f"     Base CVSS  : {score_bar(base)}")
-    print(f"     Adjusted   : {score_bar(adj)}  {c(delta_col + Color.BOLD, f'({delta:+.1f} context adjustment)')}")
-
-    if cs.get("active_factors"):
-        factors_short = [f["label_th"][:50] for f in cs["active_factors"][:3]]
-        print(f"     Factors    : {c(Color.GRAY, ' | '.join(factors_short))}")
-
-def print_top_findings(scored_reports: dict, top_n: int = 10):
-    """ top N findings adjusted score"""
+def print_top_findings(scored_reports: dict, top_n: int = 10) -> None:
+    """Display the top N findings sorted by adjusted score."""
     all_findings = []
-
     for scanner, report in scored_reports.items():
         if scanner.startswith("_") or not report:
             continue
@@ -332,7 +356,8 @@ def print_top_findings(scored_reports: dict, top_n: int = 10):
         key=lambda x: x["context_scoring"]["adjusted_score"], reverse=True
     )
 
-    print(c(Color.CYAN + Color.BOLD, f"\n  ╔══ TOP {top_n} FINDINGS (Context-Adjusted) ══════════════════════╗"))
+    print(c(Color.CYAN + Color.BOLD,
+            f"\n  ╔══ TOP {top_n} FINDINGS (Context-Adjusted) ══════════════════════╗"))
     for idx, f in enumerate(all_findings[:top_n], 1):
         cs      = f["context_scoring"]
         scanner = f.get("_scanner", "?")
@@ -341,10 +366,10 @@ def print_top_findings(scored_reports: dict, top_n: int = 10):
         base    = cs["base_score"]
         delta   = cs["delta"]
         sev     = cs["severity_adj"]
-        sev_changed = cs["severity_base"] != sev
 
-        delta_col = Color.RED if delta > 0 else (Color.GREEN if delta < 0 else Color.GRAY)
-        change_str = c(Color.ORANGE + Color.BOLD, f" ▲ UPGRADED to {sev}") if sev_changed and delta > 0 else ""
+        delta_col  = Color.RED if delta > 0 else (Color.GREEN if delta < 0 else Color.GRAY)
+        upgrade    = cs["severity_base"] != sev and delta > 0
+        change_str = c(Color.ORANGE + Color.BOLD, f" ▲ UPGRADED → {sev}") if upgrade else ""
 
         print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY, f'{idx:>2}.')} "
               f"{c(Color.MAGENTA, f'[{scanner}]')} "
@@ -356,14 +381,14 @@ def print_top_findings(scored_reports: dict, top_n: int = 10):
               f"{change_str}")
         print(f"  {c(Color.CYAN,'║')}")
 
-    print(c(Color.CYAN + Color.BOLD, "  ╚══════════════════════════════════════════════════════════════╝\n"))
+    print(c(Color.CYAN + Color.BOLD,
+            "  ╚══════════════════════════════════════════════════════════════╝\n"))
 
-def print_summary(scored_reports: dict):
-    factors = scored_reports.get("_context_factors", {})
-    tw      = total_weight(factors)
-    tw_col  = Color.RED if tw > 0 else (Color.GREEN if tw < 0 else Color.GRAY)
 
-    # upgraded findings
+def print_summary(scored_reports: dict) -> None:
+    factors  = scored_reports.get("_context_factors", {})
+    tw       = total_weight(factors)
+    tw_col   = Color.RED if tw > 0 else (Color.GREEN if tw < 0 else Color.GRAY)
     upgraded = 0
     for scanner, report in scored_reports.items():
         if scanner.startswith("_") or not report:
@@ -375,9 +400,12 @@ def print_summary(scored_reports: dict):
                     upgraded += 1
 
     print(f"\n{c(Color.CYAN + Color.BOLD, '  ╔══ RISK SCORING SUMMARY ════════════════════════════════════╗')}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Net Context Adjustment :')} {c(tw_col + Color.BOLD, f'{tw:+.1f} to all scores')}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Findings Upgraded      :')} {c(Color.ORANGE + Color.BOLD if upgraded else Color.GREEN, str(upgraded))}")
+    print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Net Context Adjustment :')} "
+          f"{c(tw_col + Color.BOLD, f'{tw:+.1f} applied to all scores')}")
+    print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Findings Upgraded      :')} "
+          f"{c(Color.ORANGE + Color.BOLD if upgraded else Color.GREEN, str(upgraded))}")
     print(f"  {c(Color.CYAN,'║')}")
-    print(f" {c(Color.CYAN,'║')} {c(Color.YELLOW,'ℹ Score environment ')}")
-    print(f" {c(Color.CYAN,'║')} {c(Color.YELLOW,' base CVSS score NVD')}")
-    print(c(Color.CYAN + Color.BOLD, '  ╚════════════════════════════════════════════════════════════╝\n'))
+    print(f"  {c(Color.CYAN,'║')}  {c(Color.YELLOW, 'ℹ  Scores reflect actual exploitability in this environment.')}")
+    print(f"  {c(Color.CYAN,'║')}  {c(Color.YELLOW, '   Base CVSS from NVD; adjustments are COSVINTE-specific.')}")
+    print(c(Color.CYAN + Color.BOLD,
+            '  ╚════════════════════════════════════════════════════════════╝\n'))
