@@ -1,0 +1,38 @@
+version: "3.9"
+
+# ══════════════════════════════════════════════════════════════════
+#  COSVINTE Docker Test Suite
+#  Source: https://github.com/Sumxmer/COSVINTE
+#
+#  Usage:
+#    docker compose up --build cosvinte-clean   # false positive test
+#    docker compose up --build cosvinte-vuln    # true positive test
+#    docker compose up --build                  # both at once
+#
+#  PDF reports saved to:
+#    ./reports/clean/
+#    ./reports/vuln/
+# ══════════════════════════════════════════════════════════════════
+
+services:
+
+  cosvinte-clean:
+    build:
+      context: .
+      dockerfile: Dockerfile.clean
+    container_name: cosvinte-clean
+    volumes:
+      - ./reports/clean:/opt/cosvinte/reports
+    environment:
+      - TERM=xterm-256color
+
+  cosvinte-vuln:
+    build:
+      context: .
+      dockerfile: Dockerfile.vuln
+    container_name: cosvinte-vuln
+    volumes:
+      - ./reports/vuln:/opt/cosvinte/reports
+    environment:
+      - TERM=xterm-256color
+    privileged: true

@@ -1,0 +1,58 @@
+# ══════════════════════════════════════════════════════════════════
+#  COSVINTE — Vulnerable Container (True Positive Test)
+#  Ubuntu 20.04 with intentional vulnerabilities planted
+#  Clones directly from: https://github.com/Sumxmer/COSVINTE
+#
+#  Planted vulnerabilities:
+#    [W1] /etc/passwd world-writable       → Writable Paths scanner
+#    [W2] /var/log/cron world-writable     → Cron scanner
+#    [W3] /tmp/backup.sh writable + cron   → CHAIN-001
+#    [P1] cap_setuid on python3 copy       → Capabilities scanner + CHAIN-003
+#    [S1] testuser sudo NOPASSWD ALL       → PATH Hijack scanner
+# ══════════════════════════════════════════════════════════════════
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV TERM=xterm-256color
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip \
+        git \
+        cron \
+        sudo \
+        libcap2-bin \
+        procps \
+        lsb-release \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install reportlab packaging
+
+# ── Clone COSVINTE from GitHub ─────────────────────────────────────
+RUN git clone https://github.com/Sumxmer/COSVINTE /opt/cosvinte
+
+RUN mkdir -p /opt/cosvinte/reports && chmod 777 /opt/cosvinte/reports
+
+# ── [W1] /etc/passwd world-writable ───────────────────────────────
+RUN chmod 666 /etc/passwd
+
+# ── [W2] /var/log/cron world-writable ─────────────────────────────
+RUN touch /var/log/cron && chmod 666 /var/log/cron
+
+# ── [W3] World-writable cron script running as root ───────────────
+RUN echo '*/5 * * * * root /tmp/backup.sh' > /etc/cron.d/backup \
+    && echo '#!/bin/bash' > /tmp/backup.sh \
+    && chmod 777 /tmp/backup.sh
+
+# ── [P1] cap_setuid on python3 ────────────────────────────────────
+RUN cp /usr/bin/python3 /usr/local/bin/python3-cap \
+    && setcap cap_setuid+ep /usr/local/bin/python3-cap
+
+# ── [S1] testuser gets sudo ALL ───────────────────────────────────
+RUN useradd -m -s /bin/bash testuser && echo "testuser:testpass" | chpasswd \
+    && echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+WORKDIR /opt/cosvinte
+USER testuser
+
+CMD ["python3", "cosvinte.py", "--analyze"]
