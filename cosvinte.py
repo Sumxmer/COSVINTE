@@ -78,10 +78,13 @@ BANNER = f"""
 # PDF generator import
 # ─────────────────────────────────────────────────────
 def _load_pdf():
-    mod = _load("pdf_report.py", "cosvinte_pdf")
-    if mod is None:
-        print(cc(YE, "  ⚠  pdf_report.py not found — PDF generation disabled."))
-    return mod
+    # Try new filename first, then legacy name
+    for filename in ("pdf_report.py", "cosvinte_pdf_report.py"):
+        mod = _load(filename, "cosvinte_pdf")
+        if mod is not None:
+            return mod
+    print(cc(YE, "  ⚠  pdf_report.py not found — PDF generation disabled."))
+    return None
 
 # ─────────────────────────────────────────────────────
 
