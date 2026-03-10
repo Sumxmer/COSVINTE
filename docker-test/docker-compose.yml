@@ -2,7 +2,7 @@ version: "3.9"
 
 # ══════════════════════════════════════════════════════════════════
 #  COSVINTE Docker Test Suite
-#  Source: https://github.com/Sumxmer/COSVINTE
+#  Source: https://github.com/Sumxmer/COSVINTE branch test
 #
 #  Usage:
 #    docker compose up --build cosvinte-clean   # false positive test
