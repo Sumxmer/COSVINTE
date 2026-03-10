@@ -1,4 +1,4 @@
-branch - main
+branch - test-container
 ให้ รัน ไฟล์ cosvinte.py  จะไปเรียกไฟล์ช่องโหว่ต่างๆ
 
 โปรเจคนี้เป็น script ตรวจสอบ cve ของ linux  โดยเปรียบเทียบเวอร์ชั่น และมีการให้คะแนนCVSS และสร้าง Report เป็นไฟล์ PDF
