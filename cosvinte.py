@@ -651,9 +651,9 @@ def run_all_plus(pdf_mod=None):
     if rem_mod and reports_dict:
         print(cc(CY+B, "\n  ▸  Remediation Roadmap ...\n"))
         rem_mod.print_banner()
-        actions = rem_mod.build_roadmap(scored_reports, chains)
+        actions = rem_mod.build_roadmap(scored_reports)
         rem_mod.print_roadmap(actions)
-        rem_mod.print_summary(actions, chains)
+        rem_mod.print_summary(actions)
         _separator()
 
     # ── Combined Report ──
