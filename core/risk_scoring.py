@@ -12,11 +12,19 @@ import pwd
 import subprocess
 import platform
 
-from core.utils import (
-    Color, c, severity_badge,
-    score_to_severity, score_bar,
-    print_banner as _print_banner,
-)
+# Support being run from project root (core.utils) or directly from core/ (utils)
+try:
+    from core.utils import (
+        Color, c, severity_badge,
+        score_to_severity, score_bar,
+        print_banner as _print_banner,
+    )
+except ImportError:
+    from utils import (
+        Color, c, severity_badge,
+        score_to_severity, score_bar,
+        print_banner as _print_banner,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════

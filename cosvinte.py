@@ -32,19 +32,38 @@ import argparse
 from datetime import datetime
 
 # ─────────────────────────────────────────────────────
-# Resolve sibling module paths
+# Resolve module paths — supports flat layout AND
+# the core/ + scanners/ subfolder layout shown in
+# the project tree.
 # ─────────────────────────────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
+# Sub-folder search order for each module type
+_SEARCH_DIRS = [
+    _HERE,
+    os.path.join(_HERE, "core"),
+    os.path.join(_HERE, "scanners"),
+]
+
+# Make sure Python's import system can find `core.utils`, `core.pdf_report`, etc.
+# when scanner modules do `from core.utils import ...`
+for _d in (_HERE, os.path.join(_HERE, "core"), os.path.join(_HERE, "scanners")):
+    if _d not in sys.path:
+        sys.path.insert(0, _d)
+
+
 def _load(filename, alias):
-    """Dynamically load a scanner module by filename."""
-    path = os.path.join(_HERE, filename)
-    if not os.path.exists(path):
-        return None
-    spec = importlib.util.spec_from_file_location(alias, path)
-    mod  = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    """Dynamically load a module by filename, searching core/ and scanners/."""
+    for directory in _SEARCH_DIRS:
+        path = os.path.join(directory, filename)
+        if os.path.exists(path):
+            spec = importlib.util.spec_from_file_location(alias, path)
+            mod  = importlib.util.module_from_spec(spec)
+            # Register in sys.modules so relative imports inside the module work
+            sys.modules[alias] = mod
+            spec.loader.exec_module(mod)
+            return mod
+    return None
 
 # ─────────────────────────────────────────────────────
 # ANSI helpers (self-contained so we don't depend on
@@ -78,12 +97,12 @@ BANNER = f"""
 # PDF generator import
 # ─────────────────────────────────────────────────────
 def _load_pdf():
-    # Try new filename first, then legacy name
+    # pdf_report.py lives in core/ — try both names for backwards compat
     for filename in ("pdf_report.py", "cosvinte_pdf_report.py"):
         mod = _load(filename, "cosvinte_pdf")
         if mod is not None:
             return mod
-    print(cc(YE, "  ⚠  pdf_report.py not found — PDF generation disabled."))
+    print(cc(YE, "  ⚠  core/pdf_report.py not found — PDF generation disabled."))
     return None
 
 # ─────────────────────────────────────────────────────
@@ -138,8 +157,8 @@ def _system_info():
     }
 
 def _output_dir() -> str:
-    """Return (and create) the output folder next to this script."""
-    out = os.path.join(_HERE, "output")
+    """Return (and create) the reports/ folder next to this script."""
+    out = os.path.join(_HERE, "reports")
     os.makedirs(out, exist_ok=True)
     return out
 
