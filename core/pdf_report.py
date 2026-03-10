@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
   COSVINTE — PDF Report Generator
-  สร้าง PDF report แบบ professional จาก scan results ทั้งหมด
-  รองรับ: Capabilities, Cron, Kernel, PATH Hijack, Writable Paths,
+  Generates a professional PDF report from combined scan results.
+  Covers: Capabilities, Cron, Kernel, PATH Hijack, Writable Paths,
           Attack Chains, Context-Aware Risk Scoring, Remediation Roadmap
 """
 
@@ -62,7 +62,7 @@ MARGIN = 1.8 * cm
 # Custom Flowables
 # ──────────────────────────────────────────────
 class ColorBar(Flowable):
-    """Horizontal color bar สำหรับ severity indicators"""
+    """Horizontal color bar for severity indicators."""
     def __init__(self, width, height, color, label="", label_color=colors.white):
         super().__init__()
         self.bar_w   = width
@@ -214,7 +214,7 @@ def _build_styles():
     ps("toc_item",    fontName="Helvetica",        fontSize=9,  textColor=C_WHITE,    leading=16)
     ps("toc_page",    fontName="Helvetica",        fontSize=9,  textColor=C_GRAY,     leading=16)
     ps("chain_name",  fontName="Helvetica-Bold",   fontSize=10, textColor=C_WHITE,    spaceAfter=2)
-    ps("chain_th",    fontName="Helvetica",        fontSize=8,  textColor=C_CYAN,     spaceAfter=3)
+    ps("chain_sub",   fontName="Helvetica",        fontSize=8,  textColor=C_CYAN,     spaceAfter=3)
     ps("evidence",    fontName="Courier",          fontSize=7,  textColor=C_MEDIUM,   leading=10)
     ps("rem_title",   fontName="Helvetica-Bold",   fontSize=9,  textColor=C_WHITE,    spaceBefore=4, spaceAfter=2)
     ps("cmd",         fontName="Courier",          fontSize=7,  textColor=C_LOW,      leading=10,    backColor=C_DARK_GRAY, leftIndent=8, rightIndent=4)
@@ -274,7 +274,7 @@ def _finding_card(finding: dict, scanner: str, S: dict, idx: int) -> list:
     score = float(score)
     name  = (finding.get("cve") or finding.get("name") or
              finding.get("binary") or finding.get("path") or f"Finding #{idx}")
-    desc  = (finding.get("description") or finding.get("description_th") or "")[:200]
+    desc  = (finding.get("description") or finding.get("description_en") or finding.get("description_th") or "")[:200]
 
     # Card header row
     sev_col   = _sev_color(sev)
@@ -317,10 +317,10 @@ def _finding_card(finding: dict, scanner: str, S: dict, idx: int) -> list:
         body_rows.append(["Description", desc])
 
     # Thai description/impact
-    if finding.get("description_th"):
-        body_rows.append(["ช่องโหว่", str(finding["description_th"])[:200]])
-    if finding.get("impact_th"):
-        body_rows.append(["ผลกระทบ", str(finding["impact_th"])[:200]])
+    if finding.get("description_en") or finding.get("description_th"):
+        body_rows.append(["Detail", str(finding.get("description_en") or finding.get("description_th", ""))[:200]])
+    if finding.get("impact") or finding.get("impact_th"):
+        body_rows.append(["Impact", str(finding.get("impact") or finding.get("impact_th", ""))[:200]])
 
     if finding.get("exploit_hint"):
         body_rows.append(["Exploit", str(finding["exploit_hint"])[:120]])
@@ -337,10 +337,10 @@ def _finding_card(finding: dict, scanner: str, S: dict, idx: int) -> list:
         story.append(t)
 
     # Prevention tips Thai
-    prev = finding.get("prevention_th", [])
+    prev = finding.get("prevention") or finding.get("prevention_th") or []
     if prev:
         story.append(_sp(1))
-        story.append(Paragraph("🛡  การป้องกัน", S["h2"]))
+        story.append(Paragraph("Prevention Steps", S["h2"]))
         for i, tip in enumerate(prev[:4], 1):
             story.append(Paragraph(f"{i}. {tip}", S["step"]))
 
@@ -491,7 +491,7 @@ def _build_executive_summary(report: dict, chains: list, S: dict) -> list:
         for ch in chains[:8]:
             chain_rows.append([
                 Paragraph(str(ch.get("id", "-")), S["body"]),
-                Paragraph(_safe(str(ch.get("name_th", ch.get("name", "-")))[:55]), S["body"]),
+                Paragraph(_safe(str(ch.get("name", "-"))[:55]), S["body"]),
                 Paragraph(f' {ch.get("severity","?")} ', _badge_style(ch.get("severity","?"), S)),
                 Paragraph(f'{ch.get("confidence","?")}%', S["body"]),
             ])
@@ -616,8 +616,8 @@ def _build_attack_chains(chains: list, S: dict) -> list:
     story.append(SectionDivider("ATTACK CHAIN ANALYSIS", C_CRITICAL))
     story.append(_sp(1))
     story.append(Paragraph(
-        "ส่วนนี้แสดง attack path ที่ exploit ได้จริง โดยเชื่อมโยง findings จากหลาย scanner เข้าด้วยกัน "
-        "แต่ละ chain มี confidence score และขั้นตอนการโจมตีแบบ step-by-step",
+        "Each chain below represents a realistic multi-step privilege escalation path assembled "
+        "from findings across all scanners. Each chain has a confidence score and step-by-step walkthrough.",
         S["body_gray"]
     ))
     story.append(_sp(2))
@@ -648,9 +648,9 @@ def _build_attack_chains(chains: list, S: dict) -> list:
         # Body
         body_elements = [hdr_t]
 
-        if chain.get("name_th"):
+        if chain.get("name_en") or chain.get("name_th"):
             body_elements.append(
-                Table([[Paragraph(_safe(chain["name_th"]), S["chain_th"])]],
+                Table([[Paragraph(_safe(chain.get("name_en") or chain.get("name_th", "")), S["chain_sub"])]],
                       colWidths=[cw],
                       style=TableStyle([
                           ("BACKGROUND",  (0,0),(-1,-1), C_SURFACE),
@@ -660,9 +660,9 @@ def _build_attack_chains(chains: list, S: dict) -> list:
                       ]))
             )
 
-        if chain.get("description_th"):
+        if chain.get("description") or chain.get("description_th"):
             body_elements.append(
-                Table([[Paragraph(_safe(chain["description_th"]), S["body_gray"])]],
+                Table([[Paragraph(_safe(chain.get("description") or chain.get("description_th", "")), S["body_gray"])]],
                       colWidths=[cw],
                       style=TableStyle([
                           ("BACKGROUND",  (0,0),(-1,-1), C_SURFACE),
@@ -684,9 +684,9 @@ def _build_attack_chains(chains: list, S: dict) -> list:
         )
 
         # Steps
-        steps = chain.get("steps_th", [])
+        steps = chain.get("steps") or chain.get("steps_th") or []
         if steps:
-            step_rows = [[Paragraph("ขั้นตอนการโจมตี", S["h2"])]]
+            step_rows = [[Paragraph("Attack Steps", S["h2"])]]
             for si, step in enumerate(steps, 1):
                 for li, line in enumerate(step.split("\n")):
                     safe_line = line.strip().replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
@@ -735,10 +735,10 @@ def _build_remediation(actions: list, S: dict) -> list:
         return []
 
     TIMELINE_LABELS = {
-        "immediate": ("ทำทันที (วันนี้)",    C_CRITICAL),
-        "week1":     ("ภายใน 1 สัปดาห์",    C_HIGH),
-        "week2":     ("ภายใน 2 สัปดาห์",    C_MEDIUM),
-        "month1":    ("ภายใน 1 เดือน",      C_LOW),
+        "immediate": ("Immediate  (Today)",    C_CRITICAL),
+        "week1":     ("Within 1 Week",    C_HIGH),
+        "week2":     ("Within 2 Weeks",    C_MEDIUM),
+        "month1":    ("Within 1 Month",      C_LOW),
     }
     EFFORT_COLS = {"LOW": C_LOW, "MEDIUM": C_MEDIUM, "HIGH": C_HIGH}
 
@@ -746,8 +746,8 @@ def _build_remediation(actions: list, S: dict) -> list:
     story.append(SectionDivider("REMEDIATION ROADMAP", C_LOW))
     story.append(_sp(1))
     story.append(Paragraph(
-        "แผนการแก้ไขเรียงตาม priority: timeline → impact → effort  "
-        "แต่ละ action มี command พร้อมรันและ verify step",
+        "Actions ordered by priority: timeline -> impact -> effort. "
+        "Each action includes ready-to-run commands and a verification step.",
         S["body_gray"]
     ))
     story.append(_sp(2))
@@ -797,8 +797,8 @@ def _build_remediation(actions: list, S: dict) -> list:
 
             # Details
             details = []
-            if action.get("description_th"):
-                details.append(Paragraph(_safe(action["description_th"]), S["body_gray"]))
+            if action.get("description") or action.get("description_th"):
+                details.append(Paragraph(_safe(action.get("description") or action.get("description_th", "")), S["body_gray"]))
 
             if chains_broken:
                 details.append(Paragraph(
@@ -868,7 +868,7 @@ def _build_context_factors(factors: dict, S: dict) -> list:
     story.append(SectionDivider("CONTEXT-AWARE RISK FACTORS", C_CYAN))
     story.append(_sp(1))
     story.append(Paragraph(
-        "ปัจจัย environment เหล่านี้ถูกนำมาปรับ CVSS base score ให้สะท้อนความเสี่ยงจริงของระบบนี้",
+        "These environmental factors adjust the CVSS base score to reflect the real-world risk of this system.",
         S["body_gray"]
     ))
     story.append(_sp(2))
@@ -882,7 +882,7 @@ def _build_context_factors(factors: dict, S: dict) -> list:
     for key, factor in factors.items():
         active = factor.get("active", False)
         weight = factor.get("weight", 0.0)
-        label  = factor.get("label_th", factor.get("label", key))
+        label  = factor.get("label") or factor.get("label_th") or key
         w_col  = C_CRITICAL if weight > 0.5 else (C_LOW if weight < 0 else C_GRAY)
         s_col  = C_CRITICAL if (active and weight > 0) else (C_LOW if not active else C_GRAY)
         status = "RISK" if (active and weight > 0) else ("SAFE" if not active else "MITIGATING")
@@ -916,8 +916,8 @@ def _build_context_factors(factors: dict, S: dict) -> list:
 # ──────────────────────────────────────────────
 def generate_pdf(report: dict, output_path: str) -> str:
     """
-    สร้าง PDF report จาก combined report dict
-    คืน path ของไฟล์ที่สร้าง
+    Build the full PDF from a combined report dict.
+    Returns the output file path.
     """
     S = _build_styles()
 
@@ -950,7 +950,7 @@ def generate_pdf(report: dict, output_path: str) -> str:
     story.extend(_build_executive_summary(report, chains, S))
 
     # ── Scanner Sections ──
-    # จาก combined report ดึงข้อมูลแต่ละ scanner
+    # Extract per-scanner data and build individual sections
     scanner_keys = ["caps", "cron", "kernel", "path", "writable"]
     for key in scanner_keys:
         scanner_report = _extract_scanner_data(report, key)
@@ -977,9 +977,15 @@ def generate_pdf(report: dict, output_path: str) -> str:
 
 def _extract_scanner_data(combined: dict, scanner_key: str) -> dict:
     """
-    พยายามดึงข้อมูลของ scanner จาก combined report
-    ทั้ง combined format และ single-scanner format
+    Extract per-scanner data from a combined report dict.
+    Prefers the 'scanner_reports' sub-dict written by _combined_report().
+    Falls back to keyword matching then category filtering.
     """
+    # Preferred path: combined report has tagged per-scanner sub-reports
+    scanner_reports = combined.get("scanner_reports", {})
+    if scanner_key in scanner_reports:
+        return scanner_reports[scanner_key]
+
     tool_map = {
         "caps":     "Capability",
         "cron":     "Cron",
@@ -989,25 +995,32 @@ def _extract_scanner_data(combined: dict, scanner_key: str) -> dict:
     }
     keyword = tool_map.get(scanner_key, "")
 
-    # ถ้า report มี tool field ตรงกับ scanner นี้ (single scanner mode)
+    # Single-scanner mode: the report itself belongs to this scanner
     if keyword and keyword.lower() in str(combined.get("tool", "")).lower():
         return combined
 
-    # สำหรับ combined report: สร้าง sub-report จาก findings ที่เกี่ยวข้อง
+    # Last-resort: filter flat findings list by category (combined mode without scanner_reports)
     findings = combined.get("findings", [])
     relevant = []
 
+    CAP_CATEGORIES = {"Linux Capabilities", "Capability"}
+    CRON_CATEGORIES = {"File Permission", "Permission", "Access Control", "Cron"}
+    KERNEL_CATEGORIES = {"Race Condition", "Pipe Buffer", "Heap Overflow",
+                         "Use-After-Free", "Memory Corruption", "Buffer Overflow",
+                         "SUID", "glibc"}
+
     if scanner_key == "caps":
-        relevant = [f for f in findings if "capability" in f or "cap_" in str(f.get("capability",""))]
+        relevant = [f for f in findings if
+                    f.get("category") in CAP_CATEGORIES or
+                    f.get("capability") or
+                    "cap_" in str(f.get("name", "")).lower()]
     elif scanner_key == "cron":
-        relevant = [f for f in findings if f.get("category") in
-                    ("File Permission", "Memory Corruption", "Buffer Overflow", "Permission", "Access Control")]
+        relevant = [f for f in findings if f.get("category") in CRON_CATEGORIES]
     elif scanner_key == "kernel":
-        relevant = [f for f in findings if f.get("category") in
-                    ("Race Condition", "Pipe Buffer", "Heap Overflow", "Use-After-Free")]
+        relevant = [f for f in findings if f.get("category") in KERNEL_CATEGORIES]
     elif scanner_key == "path":
-        relevant = combined.get("path_analysis", []) + \
-                   [f for f in combined.get("suid_binaries", []) if f]
+        relevant = (combined.get("path_analysis", []) +
+                    [f for f in combined.get("suid_binaries", []) if f])
     elif scanner_key == "writable":
         relevant = combined.get("writable_paths", [])
 
@@ -1015,15 +1028,16 @@ def _extract_scanner_data(combined: dict, scanner_key: str) -> dict:
         return None
 
     return {
-        "tool":     f"COSVINTE — {scanner_key.title()} Scanner",
-        "system":   combined.get("system", {}),
-        "summary":  {},
-        "findings": relevant,
-        "writable_paths": combined.get("writable_paths", []) if scanner_key == "writable" else [],
-        "cve_correlations": combined.get("cve_correlations", []) if scanner_key == "writable" else [],
-        "checks":   combined.get("checks", {}) if scanner_key == "cron" else {},
-        "path_analysis": combined.get("path_analysis", []) if scanner_key == "path" else [],
+        "tool":              f"COSVINTE — {scanner_key.title()} Scanner",
+        "system":            combined.get("system", {}),
+        "summary":           {},
+        "findings":          relevant,
+        "writable_paths":    combined.get("writable_paths", []) if scanner_key == "writable" else [],
+        "cve_correlations":  combined.get("cve_correlations", []) if scanner_key == "writable" else [],
+        "checks":            combined.get("checks", {}) if scanner_key == "cron" else {},
+        "path_analysis":     combined.get("path_analysis", []) if scanner_key == "path" else [],
     }
+
 
 
 # ──────────────────────────────────────────────

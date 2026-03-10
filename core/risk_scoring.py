@@ -12,11 +12,19 @@ import pwd
 import subprocess
 import platform
 
-from core.utils import (
-    Color, c, severity_badge,
-    score_to_severity, score_bar,
-    print_banner as _print_banner,
-)
+# Support being run from project root (core.utils) or directly from core/ (utils)
+try:
+    from core.utils import (
+        Color, c, severity_badge,
+        score_to_severity, score_bar,
+        print_banner as _print_banner,
+    )
+except ImportError:
+    from utils import (
+        Color, c, severity_badge,
+        score_to_severity, score_bar,
+        print_banner as _print_banner,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -46,21 +54,40 @@ def _check_aslr() -> dict:
 
 
 def _check_user_in_sudo() -> dict:
-    """Unrestricted sudo → privilege escalation is trivial once code runs."""
+    """Unrestricted passwordless sudo → privilege escalation is trivial.
+
+    Weight split:
+      +1.5  NOPASSWD + (ALL) or (ALL : ALL) — no password barrier at all
+      +0.8  sudo (ALL) but password still required — meaningful but not trivial
+      +0.5  limited sudo rules — partial access
+    """
     try:
         r = subprocess.run(
             ["sudo", "-n", "-l"], capture_output=True, text=True, timeout=3
         )
-        if r.returncode == 0 and "(ALL)" in r.stdout:
+        output = r.stdout
+
+        if r.returncode == 0 and "(ALL)" in output and "NOPASSWD" in output:
             return {"active": True,  "weight": +1.5,
-                    "label": "Current user has unrestricted sudo (ALL)"}
-        if r.returncode == 0 and r.stdout.strip():
+                    "label": "Current user has NOPASSWD sudo (ALL) — passwordless root"}
+
+        if r.returncode == 0 and "(ALL)" in output:
             return {"active": True,  "weight": +0.8,
-                    "label": "Current user has limited sudo access"}
+                    "label": "Current user has sudo (ALL) — password required"}
+
+        # sudo -n failed (needs password) but user is in sudoers
+        r2 = subprocess.run(
+            ["sudo", "-l"], capture_output=True, text=True, timeout=3,
+            input=""   # send empty stdin so it doesn't hang
+        )
+        if r2.returncode == 0 and r2.stdout.strip():
+            return {"active": True,  "weight": +0.5,
+                    "label": "Current user has limited sudo rules (password required)"}
+
     except Exception:
         pass
-    return         {"active": False, "weight":  0.0,
-                    "label": "No sudo access detected"}
+    return {"active": False, "weight": 0.0,
+            "label": "No sudo access detected"}
 
 
 def _check_selinux_apparmor() -> dict:
@@ -87,20 +114,42 @@ def _check_selinux_apparmor() -> dict:
 
 
 def _check_dangerous_groups() -> dict:
-    """Membership in docker/lxd/disk/shadow etc. enables escalation."""
-    danger_groups = ["docker", "lxd", "disk", "shadow", "sudo", "wheel", "adm"]
+    """Membership in privileged groups can enable direct privilege escalation.
+
+    Severity split:
+      CRITICAL (+1.5): docker, lxd, disk  — one-command root via container/raw-disk
+      HIGH     (+1.0): shadow, sudo, wheel — password-hash access or sudo gate
+    Note: 'adm' is intentionally excluded — read-only log access is not an
+    escalation path by itself.
+    """
+    critical_groups = {"docker", "lxd", "disk"}
+    high_groups     = {"shadow", "sudo", "wheel"}
+
     try:
         import grp
         user_name   = os.environ.get("USER") or pwd.getpwuid(os.getuid()).pw_name
-        user_groups = [g.gr_name for g in grp.getgrall() if user_name in g.gr_mem]
-        found       = [g for g in user_groups if g in danger_groups]
-        if found:
-            return {"active": True,  "weight": +1.2,
-                    "label": f"User is in dangerous group(s): {', '.join(found)}"}
+        user_groups = {g.gr_name for g in grp.getgrall() if user_name in g.gr_mem}
+
+        found_critical = sorted(user_groups & critical_groups)
+        found_high     = sorted(user_groups & high_groups)
+
+        if found_critical:
+            label = f"User is in CRITICAL group(s): {', '.join(found_critical)}"
+            if found_high:
+                label += f"  |  also HIGH group(s): {', '.join(found_high)}"
+            return {"active": True,  "weight": +1.5, "label": label,
+                    "critical_groups": found_critical, "high_groups": found_high}
+
+        if found_high:
+            return {"active": True,  "weight": +1.0,
+                    "label": f"User is in elevated group(s): {', '.join(found_high)}",
+                    "critical_groups": [], "high_groups": found_high}
+
     except Exception:
         pass
-    return         {"active": False, "weight":  0.0,
-                    "label": "No dangerous group memberships detected"}
+    return {"active": False, "weight": 0.0,
+            "label": "No dangerous group memberships detected",
+            "critical_groups": [], "high_groups": []}
 
 
 def _check_writable_sensitive() -> dict:

@@ -23,6 +23,96 @@ from core.utils import (
     get_distro, save_json, print_banner as _print_banner,
 )
 
+
+# ==============================
+# Runtime Package Version Checks
+# More reliable than kernel version-range heuristics for userspace CVEs
+# ==============================
+def _get_pkg_version(pkg: str) -> str:
+    """Return installed package version via dpkg, or '' if unavailable."""
+    try:
+        r = subprocess.run(["dpkg", "-s", pkg],
+                           capture_output=True, text=True, timeout=3)
+        for line in r.stdout.splitlines():
+            if line.startswith("Version:"):
+                return line.split(":", 1)[1].strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _check_sudo_patched() -> bool:
+    """True if installed sudo >= 1.9.5p2 (CVE-2021-3156 Baron Samedit fix)."""
+    try:
+        r = subprocess.run(["sudo", "--version"],
+                           capture_output=True, text=True, timeout=3)
+        # e.g. "Sudo version 1.9.15p5"
+        m = re.search(r"Sudo version\s+(\d+)\.(\d+)\.(\d+)", r.stdout)
+        if m:
+            major, minor, patch_num = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if major > 1 or (major == 1 and minor > 9):
+                return True
+            if major == 1 and minor == 9 and patch_num >= 6:
+                return True
+            if major == 1 and minor == 9 and patch_num == 5:
+                first_line = r.stdout.split("\n")[0]
+                # p2, p3, … all have the fix
+                if re.search(r"p[2-9]", first_line):
+                    return True
+    except Exception:
+        pass
+    # dpkg fallback
+    ver = _get_pkg_version("sudo")
+    if ver:
+        m = re.search(r"1\.9\.(\d+)", ver)
+        if m and int(m.group(1)) >= 6:
+            return True
+    return False
+
+
+def _check_polkit_patched() -> bool:
+    """True if installed polkit >= 0.120 (CVE-2021-4034 PwnKit fix)."""
+    try:
+        r = subprocess.run(["pkexec", "--version"],
+                           capture_output=True, text=True, timeout=3)
+        # e.g. "pkexec version 0.105"
+        m = re.search(r"(\d+)\.(\d+)", r.stdout)
+        if m:
+            major, minor = int(m.group(1)), int(m.group(2))
+            if major > 0 or minor >= 120:
+                return True
+    except Exception:
+        pass
+    for pkg in ("policykit-1", "polkit"):
+        ver = _get_pkg_version(pkg)
+        if ver:
+            m = re.search(r"0\.(\d+)", ver)
+            if m and int(m.group(1)) >= 120:
+                return True
+            # Ubuntu 22.04+ backport: 0.105-33+ includes the fix
+            m2 = re.search(r"0\.105-(\d+)", ver)
+            if m2 and int(m2.group(1)) >= 33:
+                return True
+    return False
+
+
+def _check_glibc_patched() -> bool:
+    """True if glibc patched for CVE-2023-4911 Looney Tunables.
+
+    Fixed in upstream glibc 2.38.  Ubuntu backport: libc6 2.35-0ubuntu3.4+.
+    """
+    ver = _get_pkg_version("libc6")
+    if ver:
+        # Upstream 2.38+
+        m = re.search(r"2\.(\d+)", ver)
+        if m and int(m.group(1)) >= 38:
+            return True
+        # Ubuntu 22.04 backport: 2.35-0ubuntuX.Y where Y >= 4
+        m2 = re.search(r"2\.35-\d+ubuntu\d+\.(\d+)", ver)
+        if m2 and int(m2.group(1)) >= 4:
+            return True
+    return False
+
 # ==============================
 # CVE Database (Extended)
 # ==============================
@@ -460,6 +550,62 @@ CVE_DB = [
             " 5. Hardware Fix Silicon "
         )
     },
+    # ── New: nf_tables UAF (2024) ──
+    {
+        "cve": "CVE-2024-1086",
+        "name": "nf_tables Use-After-Free (2024)",
+        "category": "Netfilter",
+        "affected_min": "5.14",
+        "affected_max": "6.6.14",
+        "cvss": 7.8,
+        "severity": "HIGH",
+        "description": "Use-after-free in nf_tables netfilter allows local users to escalate privileges to root.",
+        "fix_commit": "f342de4e2f33e0e39165d8639387aa6c19dff660",
+        "patch_indicator": ["net/netfilter/nf_tables_api.c"],
+        "note": "Affects kernel 5.14–6.6.14 — patch in 6.6.15+. Requires unprivileged user namespaces.",
+        "thai_detail": (
+            " Use-After-Free nf_tables Netfilter Subsystem 2024\n"
+            " nft_verdict_init() rule element freed memory\n"
+            " Unprivileged user namespace CVE trigger \n"
+            " memory corruption → kernel code execution → root\n"
+            " WSL2 kernel 6.6.x range — verify kernel version"
+        ),
+        "thai_mitigation": (
+            "1. Kernel 6.6.15+ \n"
+            " 2. Unprivileged user namespace :\n"
+            "        sysctl -w kernel.unprivileged_userns_clone=0\n"
+            " 3. Ubuntu: apt update && apt upgrade linux-image-$(uname -r)\n"
+            " 4. Verify: uname -r (need > 6.6.14)"
+        )
+    },
+    # ── New: Looney Tunables / glibc ──
+    {
+        "cve": "CVE-2023-4911",
+        "name": "Looney Tunables — glibc Buffer Overflow",
+        "category": "glibc",
+        "affected_min": "0.0.1",
+        "affected_max": "999.0.0",
+        "cvss": 7.8,
+        "severity": "HIGH",
+        "description": "Buffer overflow in glibc's GLIBC_TUNABLES env var handler lets local users escalate to root via any SUID binary.",
+        "patch_indicator": [],
+        "runtime_check": "glibc",
+        "note": "Userspace CVE — depends on libc6 package version, not kernel. Runtime check via dpkg.",
+        "thai_detail": (
+            " Buffer Overflow GLIBC_TUNABLES environment variable glibc 2023\n"
+            " ld.so dynamic linker SUID binary GLIBC_TUNABLES= trigger\n"
+            " Stack-based buffer overflow → arbitrary code execution → root\n"
+            " Ubuntu 22.04 / 23.04 (unpatched libc6) affected\n"
+            " CVSSv3 7.8 LOCAL — any user with shell access"
+        ),
+        "thai_mitigation": (
+            "1. libc6 upgrade: apt upgrade libc6\n"
+            " 2. Ubuntu 22.04 target: 2.35-0ubuntu3.4 \n"
+            " 3. Ubuntu 23.04 target: 2.37-0ubuntu2.1 \n"
+            " 4. Verify: dpkg -l libc6 | grep '^ii'\n"
+            " 5. Temporary: unset GLIBC_TUNABLES SUID "
+        )
+    },
 ]
 
 # ==============================
@@ -643,6 +789,25 @@ def is_vulnerable(current, min_v, max_v):
     except:
         return False
 
+def _make_finding(entry: dict, status: str,
+                  backport: object = None, kpatch: bool = False) -> dict:
+    """Build a standardised finding dict from a CVE_DB entry."""
+    return {
+        "cve":               entry["cve"],
+        "name":              entry["name"],
+        "category":          entry["category"],
+        "severity":          entry["severity"],
+        "cvss":              entry["cvss"],
+        "description":       entry["description"],
+        "status":            status,
+        "backport_detected": backport,
+        "kpatch_detected":   kpatch,
+        "note":              entry.get("note", ""),
+        "thai_detail":       entry.get("thai_detail", ""),
+        "thai_mitigation":   entry.get("thai_mitigation", ""),
+    }
+
+
 # ==============================
 # Core Scan
 # ==============================
@@ -650,28 +815,53 @@ def scan_kernel(kernel_ver):
     findings = []
 
     for entry in CVE_DB:
-        if is_vulnerable(kernel_ver, entry["affected_min"], entry["affected_max"]):
-            # Check backport
-            patched_via_backport = check_backport_via_sysfs(entry)
-            patched_via_kpatch   = check_kpatch(entry["cve"])
+        if not is_vulnerable(kernel_ver, entry["affected_min"], entry["affected_max"]):
+            continue
 
-            patched = patched_via_backport or patched_via_kpatch
-            status  = "PATCHED" if patched else ("UNKNOWN" if patched_via_backport is None else "VULNERABLE")
+        # ── Step 1: Runtime package-level checks (userspace CVEs) ──
+        # These are more accurate than kernel version-range matching.
+        cve_id = entry["cve"]
 
-            findings.append({
-                "cve":         entry["cve"],
-                "name":        entry["name"],
-                "category":    entry["category"],
-                "severity":    entry["severity"],
-                "cvss":        entry["cvss"],
-                "description": entry["description"],
-                "status":      status,
-                "backport_detected": patched_via_backport,
-                "kpatch_detected":   patched_via_kpatch,
-                "note":        entry.get("note", ""),
-                "thai_detail":      entry.get("thai_detail", ""),
-                "thai_mitigation":  entry.get("thai_mitigation", "")
-            })
+        if cve_id == "CVE-2021-3156":          # Baron Samedit — sudo version
+            if _check_sudo_patched():
+                findings.append(_make_finding(entry, "PATCHED", backport=True))
+                continue
+
+        elif cve_id == "CVE-2021-4034":        # PwnKit — polkit version
+            if _check_polkit_patched():
+                findings.append(_make_finding(entry, "PATCHED", backport=True))
+                continue
+
+        elif entry.get("runtime_check") == "glibc" or cve_id == "CVE-2023-4911":
+            if _check_glibc_patched():
+                findings.append(_make_finding(entry, "PATCHED", backport=True))
+                continue
+            # glibc check is definitive; if not patched, report VULNERABLE
+            findings.append(_make_finding(entry, "VULNERABLE"))
+            continue
+
+        # ── Step 2: Backport / sysfs / changelog detection ──
+        patched_via_backport = check_backport_via_sysfs(entry)
+        patched_via_kpatch   = check_kpatch(cve_id)
+
+        if patched_via_backport is True or patched_via_kpatch:
+            status = "PATCHED"
+        elif patched_via_backport is None:
+            # Could not confirm either way — safer to say UNKNOWN, not VULNERABLE
+            status = "UNKNOWN"
+        else:
+            # Confirmed not patched via backport checks
+            try:
+                if version.parse(kernel_ver) > version.parse(entry["affected_max"]):
+                    status = "UNKNOWN"   # version > affected_max but couldn't confirm backport
+                else:
+                    status = "VULNERABLE"
+            except Exception:
+                status = "UNKNOWN"
+
+        findings.append(_make_finding(entry, status,
+                                      backport=patched_via_backport,
+                                      kpatch=patched_via_kpatch))
 
     return findings
 
