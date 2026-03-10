@@ -953,7 +953,6 @@ def generate_pdf(report: dict, output_path: str) -> str:
     # จาก combined report ดึงข้อมูลแต่ละ scanner
     scanner_keys = ["caps", "cron", "kernel", "path", "writable"]
     for key in scanner_keys:
-        # หา findings ที่ตรงกับ scanner นี้จาก combined data
         scanner_report = _extract_scanner_data(report, key)
         if scanner_report:
             story.extend(_build_scanner_section(key, scanner_report, S))
