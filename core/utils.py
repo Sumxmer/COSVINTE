@@ -150,9 +150,20 @@ BANNER_TEXT = """\
  ╚═════╝ ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝"""
 
 
+_BANNER_SHOWN = False   # module-level flag: ASCII art prints only once per process
+
+
 def print_banner(subtitle: str = 'Unified Scanner  |  "Conquer Vulnerabilities"') -> None:
-    """Print the shared COSVINTE ASCII banner with an optional subtitle."""
-    print(f"\n{c(Color.CYAN + Color.BOLD, BANNER_TEXT)}")
+    """Print the COSVINTE ASCII banner.
+
+    Full ASCII art is printed only on the FIRST call.
+    Subsequent calls (e.g. from sub-scanners) print only the subtitle line,
+    so the banner does not repeat when cosvinte.py runs all scanners together.
+    """
+    global _BANNER_SHOWN
+    if not _BANNER_SHOWN:
+        print(f"\n{c(Color.CYAN + Color.BOLD, BANNER_TEXT)}")
+        _BANNER_SHOWN = True
     print(c(Color.GRAY, f"  {subtitle}\n"))
 
 

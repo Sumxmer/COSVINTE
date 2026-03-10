@@ -367,14 +367,13 @@ def _finding_to_remediation_keys(finding: dict, scanner: str) -> list:
     return keys
 
 
-def build_roadmap(scored_reports: dict, chains: list) -> list:
+def build_roadmap(scored_reports: dict) -> list:
     """Build a deduplicated, sorted list of remediation actions.
 
     Sort order: timeline → impact severity → effort (LOW first).
 
     Args:
         scored_reports: Output of risk_scoring.score_all_reports().
-        chains:         Output of attack_chain.build_chains().
 
     Returns:
         List of action dicts ready for print_roadmap().
@@ -382,12 +381,8 @@ def build_roadmap(scored_reports: dict, chains: list) -> list:
     seen_keys: set  = set()
     actions:   list = []
 
-    # Map each template key to the chains it would neutralise
+    # chain_broken_by is no longer populated (attack_chain module removed)
     chain_broken_by: dict = {}
-    for chain in chains:
-        for key, tmpl in REMEDIATION_TEMPLATES.items():
-            if chain["id"] in tmpl.get("breaks_chains", []):
-                chain_broken_by.setdefault(key, []).append(chain["id"])
 
     # Build actions from findings
     for scanner, report in scored_reports.items():
@@ -523,9 +518,7 @@ def print_roadmap(actions: list) -> None:
                 print(f"        Trigger : {c(Color.MAGENTA, str(action['trigger_finding'])[:60])}")
 
             if action["breaks_chains"]:
-                chains_str = c(Color.ORANGE + Color.BOLD, ", ".join(action["breaks_chains"]))
-                print(f"        Breaks  : ⚡ {chains_str}  "
-                      f"{c(Color.GRAY, '(neutralises these attack chains)')}")
+                pass   # attack_chain module removed — field kept for schema compat
 
             # Description (word-wrap at 68 chars)
             print(f"        {c(Color.CYAN, '📋')}  {c(Color.WHITE, action['description'])[:120]}")
@@ -544,25 +537,16 @@ def print_roadmap(actions: list) -> None:
             global_idx += 1
 
 
-def print_summary(actions: list, chains: list) -> None:
+def print_summary(actions: list) -> None:
     immediate  = sum(1 for a in actions if a["timeline"] == "immediate")
     week1      = sum(1 for a in actions if a["timeline"] == "week1")
     week2_plus = sum(1 for a in actions if a["timeline"] in ("week2", "month1"))
-
-    all_broken     = set()
-    for a in actions:
-        all_broken.update(a.get("breaks_chains", []))
-    chains_broken = len(all_broken)
-    chains_total  = len(chains)
 
     print(f"\n{c(Color.CYAN + Color.BOLD, '  ╔══ ROADMAP SUMMARY ══════════════════════════════════════════╗')}")
     print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Total Actions         :')} {c(Color.WHITE + Color.BOLD, str(len(actions)))}")
     print(f"  {c(Color.CYAN,'║')}  {c(Color.BG_RED + Color.BOLD,'  IMMEDIATE           :')} {c(Color.RED    + Color.BOLD, str(immediate))}")
     print(f"  {c(Color.CYAN,'║')}  {c(Color.ORANGE + Color.BOLD,'  WEEK 1              :')} {c(Color.ORANGE + Color.BOLD, str(week1))}")
     print(f"  {c(Color.CYAN,'║')}  {c(Color.YELLOW,              '  WEEK 2+             :')} {c(Color.YELLOW + Color.BOLD, str(week2_plus))}")
-    print(f"  {c(Color.CYAN,'║')}")
-    print(f"  {c(Color.CYAN,'║')}  {c(Color.GRAY,'Attack Chains Broken  :')} "
-          f"{c(Color.GREEN + Color.BOLD, str(chains_broken))} / {c(Color.WHITE, str(chains_total))}")
     print(f"  {c(Color.CYAN,'║')}")
     print(f"  {c(Color.CYAN,'║')}  {c(Color.YELLOW, '💡  Start with action [01] — highest impact, lowest effort.')}")
     print(c(Color.CYAN + Color.BOLD,

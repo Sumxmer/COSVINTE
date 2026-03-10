@@ -406,18 +406,54 @@ WHITELIST_PREFIXES = [
     "/run/cups/",
     "/run/bluetooth/",
     "/proc/sys/kernel/ns_last_pid",
+    # WSL-specific safe paths
+    "/proc/sys/fs/",
+    "/proc/sys/kernel/",
+    "/proc/sys/net/",
+    "/proc/sys/vm/",
+    "/sys/fs/cgroup/",
+    "/sys/kernel/debug/",
+    "/tmp/snap-private-tmp",
+    "/var/snap/",
+    # snap / flatpak runtimes
+    "/var/lib/snapd/",
+    "/run/snapd/",
+    # Printer / scanner sockets
+    "/run/sane/",
+    # Common dev sockets
+    "/run/docker.sock",
+    "/run/containerd/",
+    # Python/pip temp
+    "/tmp/pip-",
+    "/tmp/tmp",
 ]
 
 def is_whitelisted(path):
     p = path.rstrip("/")
+
+    # Always skip virtual FS entries — they appear writable but aren't real files
+    for vfs in ("/proc/", "/sys/"):
+        if p.startswith(vfs):
+            # Only flag /proc entries that are actually exploitable
+            # (sysrq-trigger, pipe-max-size) — everything else is noise
+            PROC_EXPLOITABLE = [
+                "/proc/sysrq-trigger",
+                "/proc/sys/fs/pipe-max-size",
+                "/proc/sys/fs/pipe-user-pages-soft",
+                "/proc/sys/kernel/yama/ptrace_scope",
+                "/proc/sys/kernel/perf_event_paranoid",
+            ]
+            if not any(p == ep for ep in PROC_EXPLOITABLE):
+                return True   # Whitelist all other /proc and /sys entries
+
     for prefix in WHITELIST_PREFIXES:
         pfx = prefix.rstrip("/")
-        if p == pfx or p.startswith(pfx + "/"):
+        if p == pfx or p.startswith(pfx + "/") or p.startswith(pfx):
             return True
     try:
         if p.startswith("/run/") and stat.S_ISSOCK(os.lstat(p).st_mode):
             return True
-    except:
+    except Exception:
         pass
     UNIT_EXTS = (
         ".service", ".socket", ".target", ".mount",
@@ -429,8 +465,21 @@ def is_whitelisted(path):
             target = os.readlink(p)
             if target == "/dev/null" or "/usr/lib/" in target or "/lib/" in target:
                 return True
-        except:
+        except Exception:
             pass
+
+    # Skip world-writable dirs that have the sticky bit — they're intentionally
+    # shared (like /tmp 1777) and don't represent a vulnerability on their own
+    try:
+        mode = os.stat(p).st_mode
+        if bool(mode & stat.S_IWOTH) and bool(mode & stat.S_ISVTX):
+            # /tmp with sticky bit is safe — only flag if CVE explicitly matches
+            safe_sticky = ["/tmp", "/var/tmp", "/run/lock"]
+            if any(p == s or p.startswith(s + "/") for s in safe_sticky):
+                return True
+    except Exception:
+        pass
+
     return False
 
 # ==============================
@@ -505,25 +554,49 @@ def scan_writable_paths():
 # CVE Correlation
 # ==============================
 def correlate_cve(writable_findings):
+    """
+    Correlate writable paths against CVE database.
+    Uses strict matching: path must exactly match OR be a direct child (not deep subdir)
+    to avoid false positives from deep subdirectory matches.
+    """
     writable_paths = [f["path"] for f in writable_findings]
     cve_hits = {}
+
     for cve in CVE_DB:
         matched_paths = []
         for pattern in cve["path_patterns"]:
+            pat = pattern.rstrip("/")
             for wp in writable_paths:
-                if wp == pattern:
+                wp_clean = wp.rstrip("/")
+                # Exact match
+                if wp_clean == pat:
                     matched_paths.append(wp)
-                elif pattern.endswith("/") and wp.startswith(pattern):
-                    matched_paths.append(wp)
-                elif not pattern.endswith("/") and wp.startswith(pattern + "/"):
-                    remainder = wp[len(pattern)+1:]
-                    if "/" not in remainder:
+                    continue
+                # Direct child only (no deeper nesting) — prevents /proc/sys/net/foo/bar
+                # matching pattern /proc/sys/net
+                if wp_clean.startswith(pat + "/"):
+                    remainder = wp_clean[len(pat) + 1:]
+                    # Only accept direct children (no slash in remainder)
+                    if "/" not in remainder and remainder:
                         matched_paths.append(wp)
+
         if matched_paths:
-            cve_hits[cve["cve"]] = {
-                **cve,
-                "matched_paths": list(set(matched_paths))[:5]
-            }
+            # Additional confidence check: verify the path actually exists
+            # and is still world-writable at report time (race-condition guard)
+            confirmed = []
+            for mp in matched_paths:
+                try:
+                    mode = os.stat(mp).st_mode
+                    if bool(mode & stat.S_IWOTH):
+                        confirmed.append(mp)
+                except Exception:
+                    pass
+            if confirmed:
+                cve_hits[cve["cve"]] = {
+                    **cve,
+                    "matched_paths": list(set(confirmed))[:5]
+                }
+
     return list(cve_hits.values())
 
 # ==============================

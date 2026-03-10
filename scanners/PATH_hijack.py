@@ -32,10 +32,18 @@ def _wsl_detected() -> bool:
         return False
 
 
+def _is_windows_mount_path(path: str) -> bool:
+    """Return True if path is a WSL DrvFs Windows drive mount (e.g. /mnt/c/...).
 
-# ==============================
-# CVE Database
-# ==============================
+    On WSL, Windows drives are mounted under /mnt/<single-letter>/ and their
+    filesystem reports 0777 permissions for every entry — this is a kernel-level
+    artefact of the DrvFs driver, not a real writable directory.  We should never
+    report these as path-hijack findings.
+    """
+    if not _wsl_detected():
+        return False
+    import re
+    return bool(re.match(r"^/mnt/[a-z](/|$)", path))
 CVE_DB = [
     {
         "cve": "CVE-2021-4034",
@@ -399,16 +407,26 @@ def scan_path():
     findings  = []
 
     for idx, directory in enumerate(path_dirs):
+        is_win_mount = _is_windows_mount_path(directory)
+
         entry = {
-            "directory":      directory,
-            "order":          idx + 1,
-            "exists":         path_exists(directory),
-            "relative":       is_relative_path(directory),
-            "world_writable": False,
-            "owner":          "N/A",
-            "risk":           "OK",
-            "issues":         []
+            "directory":        directory,
+            "order":            idx + 1,
+            "exists":           path_exists(directory),
+            "relative":         is_relative_path(directory),
+            "world_writable":   False,
+            "owner":            "N/A",
+            "risk":             "OK",
+            "issues":           [],
+            "wsl_windows_path": is_win_mount,   # flag for downstream filtering
         }
+
+        # WSL Windows drive mounts always show 0777 — not a real finding
+        if is_win_mount:
+            entry["risk"]   = "INFO"
+            entry["issues"].append("WSL Windows drive mount (DrvFs) — permissions not meaningful on Linux")
+            findings.append(entry)
+            continue
 
         if entry["relative"]:
             entry["issues"].append("Relative path — hijackable")
@@ -503,8 +521,12 @@ def scan_suid_binaries():
 # CVE Correlation
 # ==============================
 def correlate_cve(path_findings, env_findings, suid_findings):
-    has_writable_path = any(f["world_writable"] for f in path_findings)
-    has_relative_path = any(f["relative"] for f in path_findings)
+    # Exclude WSL Windows drive mounts from writable-path CVE correlation —
+    # they report 0777 due to DrvFs artefact, not real host filesystem access.
+    real_path_findings = [f for f in path_findings if not f.get("wsl_windows_path", False)]
+
+    has_writable_path = any(f["world_writable"] for f in real_path_findings)
+    has_relative_path = any(f["relative"]       for f in real_path_findings)
     env_vars_present  = {f["variable"] for f in env_findings}
     suid_binaries     = {os.path.basename(s["path"]).lower() for s in suid_findings}
     has_any_suid      = len(suid_findings) > 0

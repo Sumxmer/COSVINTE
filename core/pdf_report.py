@@ -41,7 +41,6 @@ C_WHITE     = colors.HexColor("#e6edf3")
 C_GRAY      = colors.HexColor("#8b949e")
 C_DARK_GRAY = colors.HexColor("#21262d")
 C_ACCENT    = colors.HexColor("#7c3aed")
-C_CHAIN_HDR = colors.HexColor("#1f2937")
 
 SEV_COLORS = {
     "CRITICAL": C_CRITICAL,
@@ -213,8 +212,6 @@ def _build_styles():
     ps("step_num",    fontName="Helvetica-Bold",   fontSize=8,  textColor=C_CYAN)
     ps("toc_item",    fontName="Helvetica",        fontSize=9,  textColor=C_WHITE,    leading=16)
     ps("toc_page",    fontName="Helvetica",        fontSize=9,  textColor=C_GRAY,     leading=16)
-    ps("chain_name",  fontName="Helvetica-Bold",   fontSize=10, textColor=C_WHITE,    spaceAfter=2)
-    ps("chain_th",    fontName="Helvetica",        fontSize=8,  textColor=C_CYAN,     spaceAfter=3)
     ps("evidence",    fontName="Courier",          fontSize=7,  textColor=C_MEDIUM,   leading=10)
     ps("rem_title",   fontName="Helvetica-Bold",   fontSize=9,  textColor=C_WHITE,    spaceBefore=4, spaceAfter=2)
     ps("cmd",         fontName="Courier",          fontSize=7,  textColor=C_LOW,      leading=10,    backColor=C_DARK_GRAY, leftIndent=8, rightIndent=4)
@@ -426,91 +423,100 @@ def _build_cover(report: dict, S: dict) -> list:
     return story
 
 
-def _build_executive_summary(report: dict, chains: list, S: dict) -> list:
+def _count_findings_by_severity(report: dict) -> dict:
+    """Count findings across all scanner sub-reports by status and severity."""
+    counts = {"total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0,
+              "vulnerable": 0, "unknown": 0, "patched": 0}
+    all_findings = []
+    for key in ("findings", "writable_paths", "path_analysis", "cve_correlations"):
+        all_findings.extend(report.get(key, []))
+    for skey in ("caps", "cron", "kernel", "path", "writable"):
+        sub = report.get(skey, {})
+        if isinstance(sub, dict):
+            for key in ("findings", "writable_paths", "path_analysis"):
+                all_findings.extend(sub.get(key, []))
+    seen = set()
+    for f in all_findings:
+        fid = f.get("cve") or f.get("name") or id(f)
+        if fid in seen:
+            continue
+        seen.add(fid)
+        counts["total"] += 1
+        sev    = str(f.get("severity", "")).upper()
+        status = str(f.get("status",   "")).upper()
+        if sev == "CRITICAL":  counts["critical"] += 1
+        elif sev == "HIGH":    counts["high"]     += 1
+        elif sev == "MEDIUM":  counts["medium"]   += 1
+        elif sev == "LOW":     counts["low"]      += 1
+        if status == "VULNERABLE":  counts["vulnerable"] += 1
+        elif status == "UNKNOWN":   counts["unknown"]    += 1
+        elif status == "PATCHED":   counts["patched"]    += 1
+    return counts
+
+
+def _build_executive_summary(report: dict, S: dict) -> list:
     story = []
     story.append(SectionDivider("EXECUTIVE SUMMARY", C_CYAN))
     story.append(_sp(2))
 
+    cnts    = _count_findings_by_severity(report)
     summary = report.get("summary", {})
 
-    # Stats grid
     stats = [
-        ("Total Findings",  str(summary.get("total_findings", 0) or
-                                summary.get("total_matches", 0) or
-                                summary.get("total_cve_db", 0) or "-")),
-        ("Critical",        str(summary.get("critical", 0) or
-                                summary.get("vulnerable", 0) or "0")),
-        ("High",            str(summary.get("high", 0) or "0")),
-        ("Medium",          str(summary.get("medium", 0) or "0")),
-        ("Attack Chains",   str(len(chains))),
+        ("Total Findings",  str(cnts["total"] or summary.get("total_findings", 0) or "-")),
+        ("Vulnerable",      str(cnts["vulnerable"])),
+        ("Unknown",         str(cnts["unknown"])),
+        ("Patched",         str(cnts["patched"])),
         ("Immediate Fixes", str(sum(1 for a in report.get("remediation_roadmap", [])
                                    if a.get("timeline") == "immediate"))),
     ]
+    sev_stats = [
+        ("Critical", str(cnts["critical"]), C_CRITICAL),
+        ("High",     str(cnts["high"]),     C_HIGH),
+        ("Medium",   str(cnts["medium"]),   C_MEDIUM),
+        ("Low",      str(cnts["low"]),      C_LOW),
+    ]
 
-    stat_data = []
-    row = []
-    for i, (label, val) in enumerate(stats):
-        cell = Table(
+    def _stat_cell(val, label, color=C_CYAN):
+        return Table(
             [[Paragraph(val,   ParagraphStyle("sv", fontName="Helvetica-Bold", fontSize=22,
-                                               textColor=C_CYAN, alignment=TA_CENTER))],
+                                               textColor=color, alignment=TA_CENTER))],
              [Paragraph(label, ParagraphStyle("sl", fontName="Helvetica", fontSize=7,
                                                textColor=C_GRAY, alignment=TA_CENTER))]],
             style=TableStyle([
-                ("BACKGROUND",  (0, 0), (-1, -1), C_SURFACE),
-                ("TOPPADDING",  (0, 0), (-1, -1), 8),
-                ("BOTTOMPADDING",(0,0), (-1, -1), 8),
-                ("LINEABOVE",   (0, 0), (-1, 0),  2, C_CYAN),
+                ("BACKGROUND",    (0,0),(-1,-1), C_SURFACE),
+                ("TOPPADDING",    (0,0),(-1,-1), 8),
+                ("BOTTOMPADDING", (0,0),(-1,-1), 8),
+                ("LINEABOVE",     (0,0),(-1, 0), 2, color),
             ]))
-        row.append(cell)
-        if len(row) == 3:
-            stat_data.append(row)
-            row = []
-    if row:
-        while len(row) < 3:
-            row.append(Spacer(1, 1))
-        stat_data.append(row)
 
     col_w = (PAGE_W - MARGIN * 2) / 3
-    stats_table = Table(stat_data, colWidths=[col_w]*3,
-                        style=TableStyle([
-                            ("LEFTPADDING",  (0, 0), (-1, -1), 4),
-                            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                            ("TOPPADDING",   (0, 0), (-1, -1), 4),
-                            ("BOTTOMPADDING",(0, 0), (-1, -1), 4),
-                        ]))
-    story.append(stats_table)
+
+    # Row 1 — status counts (pad to multiple of 3)
+    stat_data, row = [], []
+    for label, val in stats:
+        row.append(_stat_cell(val, label))
+        if len(row) == 3:
+            stat_data.append(row); row = []
+    if row:
+        while len(row) < 3: row.append(Spacer(1, 1))
+        stat_data.append(row)
+
+    story.append(Table(stat_data, colWidths=[col_w]*3,
+                       style=TableStyle([("LEFTPADDING",  (0,0),(-1,-1), 4),
+                                         ("RIGHTPADDING", (0,0),(-1,-1), 4),
+                                         ("TOPPADDING",   (0,0),(-1,-1), 4),
+                                         ("BOTTOMPADDING",(0,0),(-1,-1), 4)])))
+    story.append(_sp(2))
+
+    # Row 2 — severity breakdown
+    sev_row = [_stat_cell(v, l, col) for l, v, col in sev_stats]
+    story.append(Table([sev_row], colWidths=[(PAGE_W - MARGIN*2)/4]*4,
+                       style=TableStyle([("LEFTPADDING",  (0,0),(-1,-1), 4),
+                                         ("RIGHTPADDING", (0,0),(-1,-1), 4),
+                                         ("TOPPADDING",   (0,0),(-1,-1), 4),
+                                         ("BOTTOMPADDING",(0,0),(-1,-1), 4)])))
     story.append(_sp(3))
-
-    # Attack chains quick list
-    if chains:
-        story.append(Paragraph("Attack Chains Detected", S["h1"]))
-        chain_rows = [
-            [Paragraph("ID", S["label"]), Paragraph("Chain", S["label"]),
-             Paragraph("Severity", S["label"]), Paragraph("Confidence", S["label"])]
-        ]
-        for ch in chains[:8]:
-            chain_rows.append([
-                Paragraph(str(ch.get("id", "-")), S["body"]),
-                Paragraph(_safe(str(ch.get("name_th", ch.get("name", "-")))[:55]), S["body"]),
-                Paragraph(f' {ch.get("severity","?")} ', _badge_style(ch.get("severity","?"), S)),
-                Paragraph(f'{ch.get("confidence","?")}%', S["body"]),
-            ])
-        cw = PAGE_W - MARGIN * 2
-        chain_tbl = Table(chain_rows, colWidths=[2.2*cm, cw-2.2*cm-2.5*cm-2.5*cm, 2.5*cm, 2.5*cm],
-                          style=TableStyle([
-                              ("BACKGROUND",  (0, 0), (-1, 0),  C_DARK_GRAY),
-                              ("BACKGROUND",  (0, 1), (-1, -1), C_SURFACE),
-                              ("ROWBACKGROUNDS", (0, 1), (-1, -1), [C_SURFACE, C_DARK_GRAY]),
-                              ("TEXTCOLOR",   (0, 0), (-1, 0),  C_GRAY),
-                              ("FONTNAME",    (0, 0), (-1, 0),  "Helvetica-Bold"),
-                              ("FONTSIZE",    (0, 0), (-1, -1), 8),
-                              ("TOPPADDING",  (0, 0), (-1, -1), 5),
-                              ("BOTTOMPADDING",(0,0), (-1, -1), 5),
-                              ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                              ("LINEBELOW",   (0, 0), (-1, 0),  0.5, C_BORDER),
-                          ]))
-        story.append(chain_tbl)
-
     story.append(PageBreak())
     return story
 
@@ -608,128 +614,6 @@ def _build_scanner_section(scanner_key: str, report: dict, S: dict) -> list:
     return story
 
 
-def _build_attack_chains(chains: list, S: dict) -> list:
-    if not chains:
-        return []
-
-    story = []
-    story.append(SectionDivider("ATTACK CHAIN ANALYSIS", C_CRITICAL))
-    story.append(_sp(1))
-    story.append(Paragraph(
-        "ส่วนนี้แสดง attack path ที่ exploit ได้จริง โดยเชื่อมโยง findings จากหลาย scanner เข้าด้วยกัน "
-        "แต่ละ chain มี confidence score และขั้นตอนการโจมตีแบบ step-by-step",
-        S["body_gray"]
-    ))
-    story.append(_sp(2))
-
-    for idx, chain in enumerate(chains, 1):
-        sev      = chain.get("severity", "HIGH")
-        conf     = chain.get("confidence", 0)
-        sev_col  = _sev_color(sev)
-
-        # Chain header
-        hdr_data = [[
-            Paragraph(f'{chain.get("id","?")}', S["label"]),
-            Paragraph(f'{chain.get("name","?")}', S["chain_name"]),
-            Paragraph(f' {sev} ', _badge_style(sev, S)),
-            Paragraph(f'Confidence: {conf}%', S["body_gray"]),
-        ]]
-        cw = PAGE_W - MARGIN * 2
-        hdr_t = Table(hdr_data, colWidths=[2*cm, cw-2*cm-2.5*cm-3*cm, 2.5*cm, 3*cm],
-                      style=TableStyle([
-                          ("BACKGROUND",  (0, 0), (-1, -1), C_CHAIN_HDR),
-                          ("LINEABOVE",   (0, 0), (-1, 0),  2, sev_col),
-                          ("TOPPADDING",  (0, 0), (-1, -1), 8),
-                          ("BOTTOMPADDING",(0,0), (-1, -1), 8),
-                          ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                          ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
-                      ]))
-
-        # Body
-        body_elements = [hdr_t]
-
-        if chain.get("name_th"):
-            body_elements.append(
-                Table([[Paragraph(_safe(chain["name_th"]), S["chain_th"])]],
-                      colWidths=[cw],
-                      style=TableStyle([
-                          ("BACKGROUND",  (0,0),(-1,-1), C_SURFACE),
-                          ("LEFTPADDING", (0,0),(-1,-1), 10),
-                          ("TOPPADDING",  (0,0),(-1,-1), 4),
-                          ("BOTTOMPADDING",(0,0),(-1,-1), 4),
-                      ]))
-            )
-
-        if chain.get("description_th"):
-            body_elements.append(
-                Table([[Paragraph(_safe(chain["description_th"]), S["body_gray"])]],
-                      colWidths=[cw],
-                      style=TableStyle([
-                          ("BACKGROUND",  (0,0),(-1,-1), C_SURFACE),
-                          ("LEFTPADDING", (0,0),(-1,-1), 10),
-                          ("BOTTOMPADDING",(0,0),(-1,-1), 6),
-                      ]))
-            )
-
-        # MITRE + Sources
-        mitre_sources = f"MITRE: {chain.get('mitre','?')}   |   Sources: {', '.join(chain.get('sources_used',[]))}"
-        body_elements.append(
-            Table([[Paragraph(_safe(mitre_sources), S["body_gray"])]],
-                  colWidths=[cw],
-                  style=TableStyle([
-                      ("BACKGROUND", (0,0),(-1,-1), C_SURFACE),
-                      ("LEFTPADDING",(0,0),(-1,-1), 10),
-                      ("BOTTOMPADDING",(0,0),(-1,-1),4),
-                  ]))
-        )
-
-        # Steps
-        steps = chain.get("steps_th", [])
-        if steps:
-            step_rows = [[Paragraph("ขั้นตอนการโจมตี", S["h2"])]]
-            for si, step in enumerate(steps, 1):
-                for li, line in enumerate(step.split("\n")):
-                    safe_line = line.strip().replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-                    if li == 0:
-                        step_rows.append([Paragraph(f"{si}. {safe_line}", S["step"])])
-                    else:
-                        step_rows.append([Paragraph(safe_line, S["cmd"])])
-
-            steps_t = Table(step_rows, colWidths=[cw],
-                            style=TableStyle([
-                                ("BACKGROUND",  (0,0),(-1,-1), C_SURFACE),
-                                ("LEFTPADDING", (0,0),(-1,-1), 12),
-                                ("TOPPADDING",  (0,0),(-1,-1), 1),
-                                ("BOTTOMPADDING",(0,0),(-1,-1),1),
-                                ("LINEBELOW",   (0,-1),(-1,-1), 0.5, C_BORDER),
-                            ]))
-            body_elements.append(steps_t)
-
-        # Evidence
-        ev_summary = chain.get("evidence_summary", {})
-        if ev_summary:
-            ev_rows = [[Paragraph("Evidence", S["h2"])]]
-            for src, items in ev_summary.items():
-                for item in items:
-                    ev_rows.append([Paragraph(f"[{src}] {item}", S["evidence"])])
-            ev_t = Table(ev_rows, colWidths=[cw],
-                         style=TableStyle([
-                             ("BACKGROUND",  (0,0),(-1,-1), C_DARK_GRAY),
-                             ("LEFTPADDING", (0,0),(-1,-1), 12),
-                             ("TOPPADDING",  (0,0),(-1,-1), 2),
-                             ("BOTTOMPADDING",(0,0),(-1,-1),2),
-                         ]))
-            body_elements.append(ev_t)
-
-        story.append(KeepTogether(body_elements[:4]))
-        for el in body_elements[4:]:
-            story.append(el)
-        story.append(_sp(3))
-
-    story.append(PageBreak())
-    return story
-
-
 def _build_remediation(actions: list, S: dict) -> list:
     if not actions:
         return []
@@ -771,7 +655,6 @@ def _build_remediation(actions: list, S: dict) -> list:
         for action in group:
             imp_col  = _sev_color(action.get("impact", "MEDIUM"))
             eff_col  = EFFORT_COLS.get(action.get("effort", "MEDIUM"), C_GRAY)
-            chains_broken = action.get("breaks_chains", [])
 
             # Action header
             hdr = [[
@@ -799,13 +682,6 @@ def _build_remediation(actions: list, S: dict) -> list:
             details = []
             if action.get("description_th"):
                 details.append(Paragraph(_safe(action["description_th"]), S["body_gray"]))
-
-            if chains_broken:
-                details.append(Paragraph(
-                    f"Breaks Attack Chains: {', '.join(chains_broken)}",
-                    ParagraphStyle("chain_ref", fontName="Helvetica-Bold", fontSize=7,
-                                   textColor=C_MEDIUM)
-                ))
 
             trigger = action.get("trigger_finding", "")
             if trigger:
@@ -946,8 +822,7 @@ def generate_pdf(report: dict, output_path: str) -> str:
     story.extend(_build_cover(report, S))
 
     # ── Executive Summary ──
-    chains = report.get("attack_chains", [])
-    story.extend(_build_executive_summary(report, chains, S))
+    story.extend(_build_executive_summary(report, S))
 
     # ── Scanner Sections ──
     # จาก combined report ดึงข้อมูลแต่ละ scanner
@@ -956,10 +831,6 @@ def generate_pdf(report: dict, output_path: str) -> str:
         scanner_report = _extract_scanner_data(report, key)
         if scanner_report:
             story.extend(_build_scanner_section(key, scanner_report, S))
-
-    # ── Attack Chains ──
-    if chains:
-        story.extend(_build_attack_chains(chains, S))
 
     # ── Context Factors ──
     context_factors = report.get("context_factors", {})

@@ -11,7 +11,7 @@
   "Conquer Vulnerabilities"
 
   Integrates: Capabilities · Cron · Kernel · PATH Hijack · Writable Paths
-              + Attack Chain Analysis · Context-Aware Risk Scoring
+              + Context-Aware Risk Scoring
               + Remediation Roadmap · Automatic PDF Report Generation
 
   Usage:
@@ -26,6 +26,7 @@
     python3 cosvinte.py --all --no-pdf   # skip PDF generation
 """
 
+from __future__ import annotations
 import os
 import sys
 import json
@@ -35,7 +36,7 @@ import argparse
 from datetime import datetime
 from typing import Optional
 from typing import List, Dict, Tuple
-from __future__ import annotations
+
 
 from core.utils import (
     Color as _C, c as cc, system_info as _system_info,
@@ -201,17 +202,6 @@ def _load_optional_module(filename: str, alias: str, label: str):
         print(cc(YE, f"  ⚠  {label} disabled ({filename} not found next to cosvinte.py)."))
         return None
     return _load_module(path, alias)
-
-
-def _load_attack_chain():
-    for path in [
-        os.path.join(_HERE, "core",     "attack_chain.py"),
-        os.path.join(_HERE, "attack_chain.py"),
-    ]:
-        if os.path.exists(path):
-            return _load_module(path, "attack_chain")
-    print(cc(YE, "  ⚠  Attack Chain analysis disabled (core/attack_chain.py not found)."))
-    return None
 
 
 def _load_risk_scoring():
@@ -642,7 +632,7 @@ MENU_ITEMS = [
     ("4", "PATH Hijack Scanner",               "path"),
     ("5", "Writable Path Scanner",             "writable"),
     ("6", "Run ALL Scanners",                  "all"),
-    ("7", "ALL + Attack Chain + Remediation",  "all_plus"),
+    ("7", "ALL + Risk Scoring + Remediation",  "all_plus"),
     ("0", "Exit",                              "exit"),
 ]
 
@@ -676,8 +666,7 @@ def run_all_scanners(pdf_mod=None) -> Tuple[List[dict], Dict[str, dict]]:
 
 
 def run_all_plus(pdf_mod=None) -> dict:
-    """Run all scanners then Attack Chain → Risk Scoring → Remediation → PDF."""
-    ac_mod  = _load_attack_chain()
+    """Run all scanners then Risk Scoring → Remediation → PDF."""
     rs_mod  = _load_risk_scoring()
     rem_mod = _load_remediation()
 
@@ -696,37 +685,23 @@ def run_all_plus(pdf_mod=None) -> dict:
         rs_mod.print_summary(scored_reports)
         _separator()
 
-    # ── Attack Chain Analysis ──────────────────────────────────
-    chains = []
-    if ac_mod and reports_dict:
-        print(cc(CY + B, "\n  ▸  Attack Chain Analysis …\n"))
-        ac_mod.print_banner()
-        mem = ac_mod.check_memory_protections()
-        ac_mod.print_mem_protections(mem)
-        chains = ac_mod.build_chains(scored_reports)
-        ac_mod.print_chains(chains)
-        ac_mod.print_summary(chains)
-        _separator()
-
     # ── Remediation Roadmap ────────────────────────────────────
     actions = []
     if rem_mod and reports_dict:
         print(cc(CY + B, "\n  ▸  Remediation Roadmap …\n"))
         rem_mod.print_banner()
-        actions = rem_mod.build_roadmap(scored_reports, chains)
+        actions = rem_mod.build_roadmap(scored_reports)
         rem_mod.print_roadmap(actions)
-        rem_mod.print_summary(actions, chains)
+        rem_mod.print_summary(actions)
         _separator()
 
     # ── Build combined report ──────────────────────────────────
     combined = _merge_reports(reports_list)
-    if ac_mod and chains:
-        combined["attack_chains"] = ac_mod.chains_to_report_dict(chains)
     if rem_mod and actions:
         combined["remediation_roadmap"] = rem_mod.roadmap_to_report_dict(actions)
     if rs_mod and "_context_factors" in scored_reports:
         combined["context_factors"] = {
-            k: {"active": v.get("active"), "weight": v.get("weight"), "label_th": v.get("label_th", "")}
+            k: {"active": v.get("active"), "weight": v.get("weight"), "label": v.get("label", "")}
             for k, v in scored_reports["_context_factors"].items()
         }
 
@@ -753,7 +728,7 @@ def _print_menu() -> None:
         icon = ("●" if num not in ("0", "6", "7")
                 else ("◆◆" if num == "7" else ("◆" if num == "6" else "✖")))
         print(f"  {cc(GY, chr(8214))}  {cc(col, icon)} {cc(WH, num)}  {cc(col if num != '0' else GY, label)}")
-    print(f"{CY}{B}  ╚═══════════════════════════════════════════════════════╝{R}\n")
+    print(f"{CY}{B}  ╚══════════════════════════════════════════════════════╝{R}\n")
 
 
 def _ask_pdf(pdf_mod) -> bool:
@@ -822,7 +797,7 @@ Examples:
   python3 cosvinte.py --caps            # capabilities scan
   python3 cosvinte.py --kernel --no-pdf # kernel scan, no PDF
   python3 cosvinte.py --all             # run all 5 scanners + combined PDF
-  python3 cosvinte.py --analyze         # run all + attack chain + remediation
+  python3 cosvinte.py --analyze         # run all + risk scoring + remediation
   python3 cosvinte.py --all --no-pdf    # run all, skip PDF
         """,
     )
@@ -833,7 +808,7 @@ Examples:
     ap.add_argument("--writable", action="store_true", help="Run writable path scanner")
     ap.add_argument("--all",      action="store_true", help="Run all five scanners")
     ap.add_argument("--analyze",  action="store_true",
-                    help="Run all scanners + Attack Chain + Risk Scoring + Remediation")
+                    help="Run all scanners + Risk Scoring + Remediation")
     ap.add_argument("--no-pdf",   action="store_true", help="Skip PDF generation")
     ap.add_argument("--pdf",      action="store_true", help="Force PDF generation (default: on)")
     args = ap.parse_args()
