@@ -35,6 +35,7 @@ import argparse
 from datetime import datetime
 from typing import Optional
 from typing import List, Dict, Tuple
+from __future__ import annotations
 
 from core.utils import (
     Color as _C, c as cc, system_info as _system_info,
